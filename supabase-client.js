@@ -7,8 +7,8 @@
 const SupabaseManager = (function () {
   const STORAGE_KEY_URL = 'lead_scraper_supabase_url';
   const STORAGE_KEY_KEY = 'lead_scraper_supabase_key';
-  const DEFAULT_URL = 'https://buqfsssmqpqqllanuueu.supabase.co';
-  const DEFAULT_KEY = 'sb_publishable_rQ7JxT4qvKUcklHPNgfQ_Q_U9oe1X7k';
+  const DEFAULT_URL = 'https://ruuqhunjksqccteokfrg.supabase.co';
+  const DEFAULT_KEY = 'sb_publishable_H-_EG3LtErhSE26tVUCAyQ_XMQ7Gwz_';
 
   let supabaseClient = null;
 
