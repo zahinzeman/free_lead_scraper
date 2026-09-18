@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lead Scraper Pro - Enterprise Multi-Country Business Lead Extractor</title>
+  <meta name="description" content="Extract up to 70,000 verified business leads across the US, Australia, UK, New Zealand, and Ireland with live working websites, direct state targeting, and instant Supabase cloud database synchronization.">
+  <link rel="stylesheet" href="style.css">
+  <!-- Supabase Official Client JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <!-- Ambient Gradient Background Orbs -->
+  <div class="ambient-glow" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div class="app-container">
+    <!-- Header Section -->
+    <header class="header-bar">
+      <div class="brand-section">
+        <div class="brand-icon-wrapper" aria-hidden="true">⚡</div>
+        <div>
+          <h1 class="brand-title">Lead Scraper Pro <span class="brand-tag">Enterprise V2.0</span></h1>
+          <p class="brand-subtitle">Multi-country lead mining, state targeting, live website verification & Supabase cloud sync</p>
+        </div>
+      </div>
+      <div class="header-status">
+        <button type="button" class="cloud-status-pill" id="cloudConfigOpenBtn">
+          <span class="cloud-dot" id="cloudStatusDot"></span>
+          <span id="cloudStatusText">Supabase: Not Configured</span>
+        </button>
+        <div class="status-indicator">
+          <span class="pulse-dot" id="systemPulse"></span>
+          <span id="systemStatusText">Engine Ready</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Configuration Panel -->
+    <main>
+      <section class="glass-panel" aria-labelledby="configSectionTitle">
+        <div class="panel-header">
+          <h2 class="panel-title" id="configSectionTitle">
+            <span>⚙️</span> Target Configuration & Filtering
+          </h2>
+          <span class="panel-desc">Select country, state/region, industry, contact checkboxes, and quota up to 70,000 leads</span>
+        </div>
+
+        <div class="config-grid">
+          <!-- Country Selector -->
+          <div class="form-group">
+            <label for="countrySelect" class="form-label">
+              <span>🌍</span> Select Country <span class="req">*</span>
+            </label>
+            <div class="custom-select-wrapper">
+              <select id="countrySelect" class="custom-select" required>
+                <option value="United States" selected>🇺🇸 United States</option>
+                <option value="Australia">🇦🇺 Australia</option>
+                <option value="United Kingdom">🇬🇧 United Kingdom</option>
+                <option value="New Zealand">🇳🇿 New Zealand</option>
+                <option value="Ireland">🇮🇪 Ireland</option>
+                <option value="Sweden">🇸🇪 Sweden</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- State / Region Selector -->
+          <div class="form-group">
+            <label for="stateSelect" class="form-label">
+              <span>📍</span> State / Territory / Region <span class="req">*</span>
+            </label>
+            <div class="custom-select-wrapper">
+              <select id="stateSelect" class="custom-select" required>
+                <!-- Dynamically populated based on chosen country -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Industry Dropdown -->
+          <div class="form-group">
+            <label for="industrySelect" class="form-label">
+              <span>🏢</span> Target Industry <span class="req">*</span>
+            </label>
+            <div class="custom-select-wrapper">
+              <select id="industrySelect" class="custom-select" required>
+                <option value="Plumbers" selected>1. Plumbers</option>
+                <option value="Electricians">2. Electricians</option>
+                <option value="HVAC">3. HVAC</option>
+                <option value="Landscapers">4. Landscapers</option>
+                <option value="Pest Control">5. Pest Control</option>
+                <option value="Cleaning Services">6. Cleaning Services</option>
+                <option value="Handymen">7. Handymen</option>
+                <option value="Locksmiths">8. Locksmiths</option>
+                <option value="Independent Accountants">9. Independent Accountants</option>
+                <option value="Real Estate Agents">10. Real Estate Agents</option>
+                <option value="Architects, Interior Designers">11. Architects, Interior Designers</option>
+                <option value="Massage Therapists">12. Massage Therapists</option>
+                <option value="Chiropractors">13. Chiropractors</option>
+                <option value="Physiotherapists">14. Physiotherapists</option>
+                <option value="Independent Dental/Medical Clinics (Single-Location)">15. Independent Dental/Medical Clinics (Single-Location)</option>
+                <option value="Bakeries">16. Bakeries</option>
+                <option value="Independent Auto Repair Shops">17. Independent Auto Repair Shops</option>
+                <option value="Detailing Services">18. Detailing Services</option>
+                <option value="Event Planners">19. Event Planners</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Website Presence Filter (Live Websites vs Confirmed No-Website Leads) -->
+          <div class="form-group">
+            <label for="websiteFilterSelect" class="form-label">
+              <span>🌐</span> Website Presence Filter <span class="req">*</span>
+            </label>
+            <div class="custom-select-wrapper">
+              <select id="websiteFilterSelect" class="custom-select" required>
+                <option value="with_website" selected>🌐 Live Websites Only (100% Active Sites)</option>
+                <option value="no_website">📵 Confirmed NO Website Only (Agency Outreach Leads)</option>
+                <option value="all">⚡ Both / Any (Include With & Without Websites)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Separate Contact Checkboxes -->
+          <div class="form-group">
+            <label class="form-label">
+              <span>📇</span> Contact Information Required <span class="req">*</span>
+            </label>
+            <div class="contact-checkbox-group">
+              <label class="checkbox-pill">
+                <input type="checkbox" id="includeWebsitesCheck" checked>
+                <span class="checkbox-custom"></span>
+                <span class="checkbox-text">🌐 Working Websites (100% Live)</span>
+              </label>
+              <label class="checkbox-pill">
+                <input type="checkbox" id="includePhonesCheck" checked>
+                <span class="checkbox-custom"></span>
+                <span class="checkbox-text">📞 Verified Phone Numbers</span>
+              </label>
+              <label class="checkbox-pill" title="Blocks businesses with more than 2 locations and all multi-country multinational corporations">
+                <input type="checkbox" id="excludeChainsCheck" checked>
+                <span class="checkbox-custom"></span>
+                <span class="checkbox-text">🛡️ Strict Local Filter (Max 2 Locs, No Multi-Country)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Target Lead Volume Selector (Up to 70,000) -->
+          <div class="form-group full-width-sm">
+            <label class="form-label">
+              <span>🎯</span> Lead Quota (Max: 70,000 Leads) <span class="req">*</span>
+            </label>
+            <div class="quota-selector" id="quotaSelectorGroup">
+              <button type="button" class="quota-btn active" data-quota="1000" id="quotaBtn1k">1,000</button>
+              <button type="button" class="quota-btn" data-quota="5000" id="quotaBtn5k">5,000</button>
+              <button type="button" class="quota-btn" data-quota="10000" id="quotaBtn10k">10,000</button>
+              <button type="button" class="quota-btn" data-quota="30000" id="quotaBtn30k">30,000</button>
+              <button type="button" class="quota-btn highlight" data-quota="70000" id="quotaBtn70k">70,000</button>
+            </div>
+            <input type="hidden" id="selectedQuotaInput" value="1000">
+          </div>
+        </div>
+
+        <!-- Action Control Buttons -->
+        <div class="actions-bar">
+          <button type="button" class="btn btn-primary" id="startScraperBtn">
+            <span>🚀</span> Start Scraper
+          </button>
+          <button type="button" class="btn btn-secondary" id="pauseScraperBtn" disabled>
+            <span>⏸️</span> Pause
+          </button>
+          <button type="button" class="btn btn-secondary" id="stopScraperBtn" disabled>
+            <span>🛑</span> Stop
+          </button>
+          <button type="button" class="btn btn-download" id="downloadCsvBtn" disabled>
+            <span>📥</span> Download CSV (<span id="downloadCountBadge">0</span>)
+          </button>
+          <button type="button" class="btn btn-sheets" id="syncGoogleSheetsBtn" disabled>
+            <span>📊</span> Sync to Sheets
+          </button>
+          <button type="button" class="btn btn-secondary" id="openSheetsModalBtn">
+            <span>📑</span> Sheets Settings
+          </button>
+          <button type="button" class="btn btn-supabase" id="syncSupabaseBtn" disabled>
+            <span>☁️</span> Sync to Supabase
+          </button>
+          <button type="button" class="btn btn-secondary" id="openSupabaseModalBtn">
+            <span>⚙️</span> Database Settings
+          </button>
+          <button type="button" class="btn btn-secondary" id="clearLeadsBtn">
+            <span>🗑️</span> Clear All
+          </button>
+        </div>
+      </section>
+
+      <!-- Real-time Telemetry & Metrics -->
+      <section class="metrics-grid" aria-label="Scraper Live Metrics">
+        <div class="metric-card">
+          <div class="metric-icon emerald">📊</div>
+          <div class="metric-data">
+            <span class="metric-label">Total Leads Gathered</span>
+            <span class="metric-value" id="metricTotalLeads">0</span>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-icon cyan">📞</div>
+          <div class="metric-data">
+            <span class="metric-label">Verified Phone Numbers</span>
+            <span class="metric-value" id="metricVerifiedPhones">0</span>
+          </div>
+        </div>
+
+        <div class="metric-card" id="metricWebsitesCard">
+          <div class="metric-icon indigo" id="metricWebsitesIcon">🌐</div>
+          <div class="metric-data">
+            <span class="metric-label" id="metricWebsitesLabel">Working Websites</span>
+            <span class="metric-value" id="metricWebsites">0</span>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-icon amber">⚡</div>
+          <div class="metric-data">
+            <span class="metric-label">Throughput Velocity</span>
+            <span class="metric-value" id="metricVelocity">0 /s</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Live Extraction Progress Bar & Realtime Console -->
+      <section class="glass-panel" aria-label="Progress & Logs">
+        <div class="progress-panel">
+          <div class="progress-header">
+            <span id="progressStatusLabel">Extraction Progress</span>
+            <span id="progressPercentageText">0%</span>
+          </div>
+          <div class="progress-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" id="progressBarTrack">
+            <div class="progress-fill" id="progressBarFill"></div>
+          </div>
+        </div>
+
+        <!-- Terminal Console -->
+        <div class="terminal-wrapper" id="terminalLog">
+          <div class="terminal-line">[System] Lead Scraper Engine initialized. Ready to begin directory discovery.</div>
+        </div>
+      </section>
+
+      <!-- Extracted Leads Data Grid Table -->
+      <section class="glass-panel" aria-labelledby="tableHeading">
+        <div class="table-controls">
+          <div>
+            <h2 class="panel-title" id="tableHeading">
+              <span>📋</span> Live Lead Stream (<span id="tableLeadCount">0</span>)
+            </h2>
+            <span class="panel-desc">Interactive preview of captured leads with verified contacts and decision makers</span>
+          </div>
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" class="search-input" id="tableSearchInput" placeholder="Search business, state, city, phone...">
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table" id="leadsDataTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Country</th>
+                <th>State / Region</th>
+                <th>Business Name</th>
+                <th>Owner / Decision Maker</th>
+                <th id="thPhone">Verified Phone</th>
+                <th id="thWebsite">Website URL</th>
+                <th id="thStatus">Website Status</th>
+                <th>Industry</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="leadsTableBody">
+              <tr>
+                <td colspan="10">
+                  <div class="empty-state">
+                    <div class="empty-icon">📁</div>
+                    <p>No leads extracted yet. Configure your criteria above and click <strong>Start Scraper</strong> to extract up to 70,000 leads.</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Controls -->
+        <div class="pagination-bar" id="paginationBar" style="display: none;">
+          <div id="paginationInfo">Showing 1 to 25 of 0 leads</div>
+          <div class="pagination-controls">
+            <button type="button" class="page-btn" id="prevPageBtn" disabled>◀ Previous</button>
+            <button type="button" class="page-btn" id="nextPageBtn" disabled>Next ▶</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Supabase Cloud Settings Modal -->
+  <div class="modal-backdrop" id="supabaseModal" aria-hidden="true" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title"><span>☁️</span> Supabase Cloud Database Configuration</h3>
+        <button type="button" class="modal-close-btn" id="closeSupabaseModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Connect your Supabase project to seamlessly stream and store extracted leads in a PostgreSQL database.</p>
+        
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label for="supabaseUrlInput" class="form-label">Supabase Project URL</label>
+          <input type="url" id="supabaseUrlInput" class="custom-input" placeholder="https://your-project.supabase.co">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 18px;">
+          <label for="supabaseKeyInput" class="form-label">Supabase Anon API Key</label>
+          <input type="password" id="supabaseKeyInput" class="custom-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+        </div>
+
+        <div class="modal-actions-row">
+          <button type="button" class="btn btn-secondary" id="testSupabaseConnectionBtn">
+            <span>🔌</span> Test Connection
+          </button>
+          <button type="button" class="btn btn-primary" id="saveSupabaseConfigBtn">
+            <span>💾</span> Save Credentials
+          </button>
+        </div>
+
+        <div id="supabaseFeedbackMsg" class="feedback-msg" style="display: none;"></div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border-subtle); margin: 20px 0;">
+
+        <div class="sql-guide-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-weight: 600; font-size: 13px; color: var(--text-secondary);">First time? Run this SQL in your Supabase SQL Editor:</span>
+            <button type="button" class="btn btn-secondary btn-sm" id="copySqlSchemaBtn">
+              <span>📋</span> Copy SQL Schema
+            </button>
+          </div>
+          <pre class="sql-preview" id="sqlSchemaPreview"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Google Sheets Sync Configuration Modal -->
+  <div class="modal-backdrop" id="sheetsModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="sheetsModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="sheetsModalTitle">
+          <span>📊</span> Google Sheets Direct Integration
+        </h3>
+        <button type="button" class="modal-close-btn" id="closeSheetsModalBtn" aria-label="Close modal">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <p class="modal-desc">Directly push and append extracted leads into any Google Spreadsheet via your Google Apps Script Web App URL.</p>
+        
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label for="sheetsWebhookUrlInput" class="form-label">Google Apps Script Web App URL</label>
+          <input type="url" id="sheetsWebhookUrlInput" class="custom-input" placeholder="https://script.google.com/macros/s/.../exec">
+        </div>
+
+        <div class="modal-actions-row">
+          <button type="button" class="btn btn-secondary" id="testSheetsConnectionBtn">
+            <span>🔌</span> Test Connection
+          </button>
+          <button type="button" class="btn btn-primary" id="saveSheetsConfigBtn">
+            <span>💾</span> Save Webhook
+          </button>
+        </div>
+
+        <div id="sheetsFeedbackMsg" class="feedback-msg" style="display: none;"></div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border-subtle); margin: 20px 0;">
+
+        <div class="sql-guide-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-weight: 600; font-size: 13px; color: var(--text-secondary);">30-Sec Setup: Paste into Google Sheet &gt; Extensions &gt; Apps Script</span>
+            <button type="button" class="btn btn-secondary btn-sm" id="copyAppsScriptBtn">
+              <span>📋</span> Copy Script
+            </button>
+          </div>
+          <pre class="sql-preview" id="appsScriptPreview"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="scraper-engine.js"></script>
+  <script src="csv-exporter.js"></script>
+  <script src="supabase-client.js"></script>
+  <script src="google-sheets-client.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
