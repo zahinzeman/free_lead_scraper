@@ -4,7 +4,8 @@
   "description": "High-performance business directory lead scraper and CSV exporter",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "echo 'Static site ready for Vercel deployment'"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
