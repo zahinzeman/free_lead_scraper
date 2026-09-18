@@ -6,13 +6,14 @@
 
 const GoogleSheetsManager = (function () {
   const STORAGE_KEY_WEBHOOK = 'lead_scraper_sheets_webhook';
+  const DEFAULT_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbyNfydW1oZn9fyizySU9N8sARjJjSRxOn6O9y0SFcO2qJ1fHCMKdVZB36qfngy_PrnJNQ/exec';
 
   function getSavedConfig() {
     if (typeof localStorage === 'undefined') {
-      return { webhookUrl: '' };
+      return { webhookUrl: DEFAULT_WEBHOOK_URL };
     }
     return {
-      webhookUrl: localStorage.getItem(STORAGE_KEY_WEBHOOK) || ''
+      webhookUrl: localStorage.getItem(STORAGE_KEY_WEBHOOK) || DEFAULT_WEBHOOK_URL
     };
   }
 
