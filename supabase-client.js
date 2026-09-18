@@ -7,16 +7,18 @@
 const SupabaseManager = (function () {
   const STORAGE_KEY_URL = 'lead_scraper_supabase_url';
   const STORAGE_KEY_KEY = 'lead_scraper_supabase_key';
+  const DEFAULT_URL = 'https://buqfsssmqpqqllanuueu.supabase.co';
+  const DEFAULT_KEY = 'sb_publishable_rQ7JxT4qvKUcklHPNgfQ_Q_U9oe1X7k';
 
   let supabaseClient = null;
 
   function getSavedConfig() {
     if (typeof localStorage === 'undefined') {
-      return { url: '', key: '' };
+      return { url: DEFAULT_URL, key: DEFAULT_KEY };
     }
     return {
-      url: localStorage.getItem(STORAGE_KEY_URL) || '',
-      key: localStorage.getItem(STORAGE_KEY_KEY) || ''
+      url: localStorage.getItem(STORAGE_KEY_URL) || DEFAULT_URL,
+      key: localStorage.getItem(STORAGE_KEY_KEY) || DEFAULT_KEY
     };
   }
 
@@ -63,9 +65,14 @@ const SupabaseManager = (function () {
       const client = window.supabase.createClient(testUrl, testKey);
       // Attempt a lightweight query to test auth
       const { data, error } = await client.from('leads').select('id').limit(1);
-      if (error && error.code !== 'PGRST116' && !error.message.includes('relation "public.leads" does not exist')) {
-        // Table might not exist yet, which is fine, but auth succeeded
-        if (error.message.includes('API key')) {
+      if (error) {
+        if (error.code === 'PGRST205' || error.message.includes('schema cache') || error.message.includes('does not exist')) {
+          return {
+            success: true,
+            message: "Connected to Supabase! Auth verified. Note: Run the SQL schema below in Supabase SQL Editor to create the 'leads' table."
+          };
+        }
+        if (error.message.includes('API key') || error.message.includes('JWT') || error.message.includes('Invalid')) {
           return { success: false, message: `Auth error: ${error.message}` };
         }
       }
