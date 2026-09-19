@@ -87,6 +87,43 @@ const SupabaseManager = (function () {
 
   /**
    * Batch uploads leads to Supabase 'leads' table
+  function deduplicateLeads(leads) {
+    if (!leads || !Array.isArray(leads)) return [];
+    const seenWebsites = new Set();
+    const seenBusinesses = new Set();
+    const seenPhones = new Set();
+    const unique = [];
+
+    for (let i = 0; i < leads.length; i++) {
+      const lead = leads[i];
+      if (!lead) continue;
+
+      const webKey = (lead.website || "").trim().toLowerCase().replace(/\/+$/, "");
+      const bizKey = (lead.businessName || "").trim().toLowerCase();
+      const phoneKey = (lead.phone || "").replace(/[^0-9]/g, "");
+
+      // If a website URL matches another one, list only one (skip duplicate)
+      if (webKey && seenWebsites.has(webKey)) {
+        continue;
+      }
+      if (bizKey && seenBusinesses.has(bizKey)) {
+        continue;
+      }
+      if (phoneKey && seenPhones.has(phoneKey)) {
+        continue;
+      }
+
+      if (webKey) seenWebsites.add(webKey);
+      if (bizKey) seenBusinesses.add(bizKey);
+      if (phoneKey) seenPhones.add(phoneKey);
+
+      unique.push(lead);
+    }
+    return unique;
+  }
+
+  /**
+   * Batch uploads leads to Supabase 'leads' table
    */
   async function syncLeadsToSupabase(leads, options = {}) {
     if (!supabaseClient) {
@@ -96,16 +133,17 @@ const SupabaseManager = (function () {
       }
     }
 
-    if (!leads || leads.length === 0) {
-      throw new Error('No leads available to sync. Run extraction first.');
+    const cleanLeads = deduplicateLeads(leads);
+    if (!cleanLeads || cleanLeads.length === 0) {
+      throw new Error('No valid leads available to sync. Run extraction first.');
     }
 
     const onProgress = options.onProgress || function () {};
     const BATCH_SIZE = 500;
     let syncedCount = 0;
 
-    for (let i = 0; i < leads.length; i += BATCH_SIZE) {
-      const batch = leads.slice(i, i + BATCH_SIZE).map(lead => ({
+    for (let i = 0; i < cleanLeads.length; i += BATCH_SIZE) {
+      const batch = cleanLeads.slice(i, i + BATCH_SIZE).map(lead => ({
         country: lead.country,
         state: lead.state || '',
         city: lead.city || '',
@@ -134,8 +172,8 @@ const SupabaseManager = (function () {
       syncedCount += batch.length;
       onProgress({
         synced: syncedCount,
-        total: leads.length,
-        percentage: Math.round((syncedCount / leads.length) * 100)
+        total: cleanLeads.length,
+        percentage: Math.round((syncedCount / cleanLeads.length) * 100)
       });
     }
 

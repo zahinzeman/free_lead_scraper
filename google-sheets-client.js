@@ -97,6 +97,44 @@ const GoogleSheetsManager = (function () {
   /**
    * Batch uploads leads directly to Google Sheets in streaming chunks
    */
+  function deduplicateLeads(leads) {
+    if (!leads || !Array.isArray(leads)) return [];
+    const seenWebsites = new Set();
+    const seenBusinesses = new Set();
+    const seenPhones = new Set();
+    const unique = [];
+
+    for (let i = 0; i < leads.length; i++) {
+      const lead = leads[i];
+      if (!lead) continue;
+
+      const webKey = (lead.website || "").trim().toLowerCase().replace(/\/+$/, "");
+      const bizKey = (lead.businessName || "").trim().toLowerCase();
+      const phoneKey = (lead.phone || "").replace(/[^0-9]/g, "");
+
+      // If a website URL matches another one, list only one (skip duplicate)
+      if (webKey && seenWebsites.has(webKey)) {
+        continue;
+      }
+      if (bizKey && seenBusinesses.has(bizKey)) {
+        continue;
+      }
+      if (phoneKey && seenPhones.has(phoneKey)) {
+        continue;
+      }
+
+      if (webKey) seenWebsites.add(webKey);
+      if (bizKey) seenBusinesses.add(bizKey);
+      if (phoneKey) seenPhones.add(phoneKey);
+
+      unique.push(lead);
+    }
+    return unique;
+  }
+
+  /**
+   * Batch uploads leads directly to Google Sheets in streaming chunks
+   */
   async function syncLeadsToGoogleSheets(leads, options = {}) {
     const config = getSavedConfig();
     const targetUrl = (options.webhookUrl || config.webhookUrl || '').trim();
@@ -105,16 +143,17 @@ const GoogleSheetsManager = (function () {
       throw new Error('Google Sheets Webhook URL is not configured. Please open Sheets Settings.');
     }
 
-    if (!leads || leads.length === 0) {
-      throw new Error('No leads available to sync. Run extraction first.');
+    const cleanLeads = deduplicateLeads(leads);
+    if (!cleanLeads || cleanLeads.length === 0) {
+      throw new Error('No valid leads available to sync. Run extraction first.');
     }
 
     const onProgress = options.onProgress || function () {};
     const BATCH_SIZE = 300; // Optimal batch size for Google Apps Script execution time limits
     let syncedCount = 0;
 
-    for (let i = 0; i < leads.length; i += BATCH_SIZE) {
-      const batch = leads.slice(i, i + BATCH_SIZE).map(lead => ({
+    for (let i = 0; i < cleanLeads.length; i += BATCH_SIZE) {
+      const batch = cleanLeads.slice(i, i + BATCH_SIZE).map(lead => ({
         id: lead.id,
         country: lead.country,
         state: lead.state || '',
@@ -151,12 +190,12 @@ const GoogleSheetsManager = (function () {
       syncedCount += batch.length;
       onProgress({
         synced: syncedCount,
-        total: leads.length,
-        percentage: Math.round((syncedCount / leads.length) * 100)
+        total: cleanLeads.length,
+        percentage: Math.round((syncedCount / cleanLeads.length) * 100)
       });
 
       // Small delay between Google Apps Script batches to respect Google quota limits
-      if (i + BATCH_SIZE < leads.length) {
+      if (i + BATCH_SIZE < cleanLeads.length) {
         await new Promise(r => setTimeout(r, 120));
       }
     }
@@ -221,9 +260,63 @@ function doPost(e) {
       sheet.setFrozenRows(1);
     }
 
-    // Prepare rows for high-speed batch append
-    var rowsToInsert = leads.map(function(lead) {
-      return [
+    // Build lookup sets of existing records in the sheet to prevent ANY duplicates
+    var existingWebsites = {};
+    var existingBusinesses = {};
+    var existingPhones = {};
+    
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      // Column 5: Business Name (col 5, index 4)
+      // Column 7: Phone (col 7, index 6)
+      // Column 8: Website URL (col 8, index 7)
+      var existingData = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+      for (var r = 0; r < existingData.length; r++) {
+        var row = existingData[r];
+        var bName = String(row[4] || "").trim().toLowerCase();
+        var bPhone = String(row[6] || "").replace(/[^0-9]/g, "");
+        var bWeb = String(row[7] || "").trim().toLowerCase().replace(/\\/+$/, "");
+
+        if (bName) existingBusinesses[bName] = true;
+        if (bPhone) existingPhones[bPhone] = true;
+        if (bWeb) existingWebsites[bWeb] = true;
+      }
+    }
+
+    // Filter incoming leads against existing records & deduplicate within batch
+    var rowsToInsert = [];
+    var skippedDuplicates = 0;
+
+    for (var i = 0; i < leads.length; i++) {
+      var lead = leads[i];
+      var leadWeb = String(lead.website || "").trim().toLowerCase().replace(/\\/+$/, "");
+      var leadBiz = String(lead.businessName || "").trim().toLowerCase();
+      var leadPhone = String(lead.phone || "").replace(/[^0-9]/g, "");
+
+      // If website URL matches another one, list only one (skip duplicate)
+      if (leadWeb && existingWebsites[leadWeb]) {
+        skippedDuplicates++;
+        continue;
+      }
+
+      // If business name matches another one, skip duplicate
+      if (leadBiz && existingBusinesses[leadBiz]) {
+        skippedDuplicates++;
+        continue;
+      }
+
+      // If phone matches another one, skip duplicate
+      if (leadPhone && existingPhones[leadPhone]) {
+        skippedDuplicates++;
+        continue;
+      }
+
+      // Mark as seen so subsequent items in the batch are also deduplicated
+      if (leadWeb) existingWebsites[leadWeb] = true;
+      if (leadBiz) existingBusinesses[leadBiz] = true;
+      if (leadPhone) existingPhones[leadPhone] = true;
+
+      rowsToInsert.push([
         lead.id,
         lead.country,
         lead.state || "",
@@ -236,10 +329,21 @@ function doPost(e) {
         lead.industry,
         lead.verified ? "Verified" : "Pending",
         lead.scrapedAt
-      ];
-    });
+      ]);
+    }
 
-    // Bulk insert all rows at once
+    // If all were duplicates, return early
+    if (rowsToInsert.length === 0) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        insertedCount: 0,
+        duplicatesSkipped: skippedDuplicates,
+        totalRows: sheet.getLastRow(),
+        message: "All leads in this batch were duplicates and were skipped."
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Bulk insert all unique rows at once
     var startRow = sheet.getLastRow() + 1;
     sheet.getRange(startRow, 1, rowsToInsert.length, rowsToInsert[0].length)
       .setValues(rowsToInsert);
@@ -247,6 +351,7 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
       insertedCount: rowsToInsert.length,
+      duplicatesSkipped: skippedDuplicates,
       totalRows: sheet.getLastRow()
     })).setMimeType(ContentService.MimeType.JSON);
 

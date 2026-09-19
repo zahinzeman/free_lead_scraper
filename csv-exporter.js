@@ -14,9 +14,45 @@ const CsvExporter = (function () {
     return `"${str}"`;
   }
 
+  function deduplicateLeads(leads) {
+    if (!leads || !Array.isArray(leads)) return [];
+    const seenWebsites = new Set();
+    const seenBusinesses = new Set();
+    const seenPhones = new Set();
+    const unique = [];
+
+    for (let i = 0; i < leads.length; i++) {
+      const lead = leads[i];
+      if (!lead) continue;
+
+      const webKey = (lead.website || "").trim().toLowerCase().replace(/\/+$/, "");
+      const bizKey = (lead.businessName || "").trim().toLowerCase();
+      const phoneKey = (lead.phone || "").replace(/[^0-9]/g, "");
+
+      // If a website url matches another one for another business, list only one
+      if (webKey && seenWebsites.has(webKey)) {
+        continue;
+      }
+      if (bizKey && seenBusinesses.has(bizKey)) {
+        continue;
+      }
+      if (phoneKey && seenPhones.has(phoneKey)) {
+        continue;
+      }
+
+      if (webKey) seenWebsites.add(webKey);
+      if (bizKey) seenBusinesses.add(bizKey);
+      if (phoneKey) seenPhones.add(phoneKey);
+
+      unique.push(lead);
+    }
+    return unique;
+  }
+
   function exportLeadsToCsv(leads, options = {}) {
-    if (!leads || leads.length === 0) {
-      alert("No leads available to export. Please run the scraper first.");
+    const cleanLeads = deduplicateLeads(leads);
+    if (!cleanLeads || cleanLeads.length === 0) {
+      alert("No valid leads available to export. Please run the scraper first.");
       return false;
     }
 
@@ -52,8 +88,8 @@ const CsvExporter = (function () {
 
     // Chunk in slices of 1500 for optimal memory footprint up to 70,000 items
     const CHUNK_SIZE = 1500;
-    for (let i = 0; i < leads.length; i += CHUNK_SIZE) {
-      const slice = leads.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < cleanLeads.length; i += CHUNK_SIZE) {
+      const slice = cleanLeads.slice(i, i + CHUNK_SIZE);
       let chunkStr = "";
 
       for (let j = 0; j < slice.length; j++) {
@@ -95,7 +131,7 @@ const CsvExporter = (function () {
     const sanitizedCountry = country.replace(/[^a-zA-Z0-9]/g, "_");
     const sanitizedIndustry = industry.replace(/[^a-zA-Z0-9]/g, "_");
     const timestamp = new Date().toISOString().split("T")[0];
-    const filename = `Leads_${filterTag}${sanitizedCountry}_${sanitizedIndustry}_${leads.length}leads_${timestamp}.csv`;
+    const filename = `Leads_${filterTag}${sanitizedCountry}_${sanitizedIndustry}_${cleanLeads.length}leads_${timestamp}.csv`;
 
     const link = document.createElement("a");
     link.href = url;
@@ -109,7 +145,7 @@ const CsvExporter = (function () {
     return {
       success: true,
       filename: filename,
-      count: leads.length
+      count: cleanLeads.length
     };
   }
 

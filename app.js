@@ -233,7 +233,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       },
       onChunk: (chunk) => {
-        allLeads.push(...chunk);
+        for (let i = 0; i < chunk.length; i++) {
+          const lead = chunk[i];
+          const webKey = (lead.website || "").trim().toLowerCase().replace(/\/+$/, "");
+          const bizKey = (lead.businessName || "").trim().toLowerCase();
+          const phoneKey = (lead.phone || "").replace(/[^0-9]/g, "");
+
+          // If a website url matches another one for another business, list only one
+          let isDuplicate = false;
+          if (webKey && allLeads.some(l => (l.website || "").trim().toLowerCase().replace(/\/+$/, "") === webKey)) {
+            isDuplicate = true;
+          }
+          if (!isDuplicate && bizKey && allLeads.some(l => (l.businessName || "").trim().toLowerCase() === bizKey)) {
+            isDuplicate = true;
+          }
+          if (!isDuplicate && phoneKey && allLeads.some(l => (l.phone || "").replace(/[^0-9]/g, "") === phoneKey)) {
+            isDuplicate = true;
+          }
+
+          if (!isDuplicate) {
+            allLeads.push(lead);
+          }
+        }
         applySearchFilter();
       },
       onLog: (msg, type) => {
