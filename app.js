@@ -1,7 +1,7 @@
 /**
  * Lead Scraper Pro V2 - Application Controller
  * Handles multi-country state selection, separate contact toggles,
- * up to 70,000 leads extraction, and Supabase cloud synchronization.
+ * up to 100,000 leads extraction, and Supabase cloud synchronization.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -80,6 +80,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const thPhone = document.getElementById('thPhone');
   const thWebsite = document.getElementById('thWebsite');
   const thStatus = document.getElementById('thStatus');
+  const thSource = document.getElementById('thSource');
+
+  function isGoogleMapsUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    return /google\.[a-z.]+\/maps|maps\.google\.|goo\.gl\/maps/i.test(url);
+  }
 
   // State Management
   let allLeads = [];
@@ -132,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (thPhone) thPhone.style.display = showPhone ? '' : 'none';
   }
 
-  // 3. Quota Selection Handling (Supports 1k, 5k, 10k, 30k, 70k)
+  // 3. Quota Selection Handling (Supports 1k, 5k, 10k, 30k, 70k, 100k)
   quotaBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       quotaBtns.forEach(b => b.classList.remove('active'));
@@ -160,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const stateCode = stateSelect.value;
     const industry = industrySelect.value;
     const websiteFilter = websiteFilterSelect ? websiteFilterSelect.value : 'with_website';
-    const quota = Math.min(70000, parseInt(selectedQuotaInput.value, 10) || 1000);
+    const quota = Math.min(100000, parseInt(selectedQuotaInput.value, 10) || 1000);
     const includeWebsites = includeWebsitesCheck.checked;
     const includePhones = includePhonesCheck.checked;
     const excludeChains = excludeChainsCheck ? excludeChainsCheck.checked : true;
@@ -198,6 +204,8 @@ document.addEventListener('DOMContentLoaded', () => {
     progressPercentageText.textContent = '0%';
     progressStatusLabel.textContent = `Extracting ${quota.toLocaleString()} ${industry} leads in ${country}...`;
 
+    let totalValidWebsitesCount = 0;
+
     // Initialize Session
     activeSession = new ScraperEngine.Session({
       country: country,
@@ -216,10 +224,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let websitesCount = 0;
         if (websiteFilter === 'no_website') {
           websitesCount = stats.current;
-        } else if (websiteFilter === 'all') {
-          websitesCount = Math.floor(stats.current / 2);
         } else {
-          websitesCount = includeWebsites ? stats.current : 0;
+          websitesCount = totalValidWebsitesCount;
         }
 
         updateMetrics(stats.current, verifiedPhonesCount, websitesCount, stats.velocity);
@@ -233,34 +239,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       },
       onChunk: (chunk) => {
+        if (!chunk || chunk.length === 0) return;
         for (let i = 0; i < chunk.length; i++) {
-          const lead = chunk[i];
-          const webKey = (lead.website || "").trim().toLowerCase().replace(/\/+$/, "");
-          const bizKey = (lead.businessName || "").trim().toLowerCase();
-          const phoneKey = (lead.phone || "").replace(/[^0-9]/g, "");
-
-          // If a website url matches another one for another business, list only one
-          let isDuplicate = false;
-          if (webKey && allLeads.some(l => (l.website || "").trim().toLowerCase().replace(/\/+$/, "") === webKey)) {
-            isDuplicate = true;
+          const l = chunk[i];
+          if (l.hasWebsite && l.website && !isGoogleMapsUrl(l.website)) {
+            totalValidWebsitesCount++;
           }
-          if (!isDuplicate && bizKey && allLeads.some(l => (l.businessName || "").trim().toLowerCase() === bizKey)) {
-            isDuplicate = true;
-          }
-          if (!isDuplicate && phoneKey && allLeads.some(l => (l.phone || "").replace(/[^0-9]/g, "") === phoneKey)) {
-            isDuplicate = true;
-          }
-
-          if (!isDuplicate) {
-            allLeads.push(lead);
-          }
+          allLeads.push(l);
         }
-        applySearchFilter();
+        if (tableSearchInput && tableSearchInput.value.trim()) {
+          applySearchFilter();
+        } else {
+          filteredLeads = allLeads;
+          tableHeading.textContent = filteredLeads.length.toLocaleString();
+        }
       },
       onLog: (msg, type) => {
         appendLog(msg, type);
       },
       onComplete: (leads) => {
+        const finalValidWebsites = allLeads.filter(l => l.hasWebsite && l.website && !isGoogleMapsUrl(l.website)).length;
+        updateMetrics(leads.length, includePhones ? leads.length : 0, websiteFilter === 'no_website' ? leads.length : finalValidWebsites, 0);
         systemPulse.className = 'pulse-dot';
         systemStatusText.textContent = 'Extraction Complete';
         startBtn.disabled = false;
@@ -369,10 +368,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     leadsTableBody.innerHTML = `
       <tr>
-        <td colspan="10">
+        <td colspan="11">
           <div class="empty-state">
             <div class="empty-icon">📁</div>
-            <p>No leads extracted yet. Configure your criteria above and click <strong>Start Scraper</strong> to extract up to 70,000 leads.</p>
+            <p>No leads extracted yet. Configure your criteria above and click <strong>Start Scraper</strong> to extract up to 100,000 leads.</p>
           </div>
         </td>
       </tr>
@@ -496,7 +495,8 @@ document.addEventListener('DOMContentLoaded', () => {
           lead.city.toLowerCase().includes(query) ||
           (lead.phone && lead.phone.toLowerCase().includes(query)) ||
           (lead.website && lead.website.toLowerCase().includes(query)) ||
-          (lead.websiteStatus && lead.websiteStatus.toLowerCase().includes(query))
+          (lead.websiteStatus && lead.websiteStatus.toLowerCase().includes(query)) ||
+          (lead.source && lead.source.toLowerCase().includes(query))
         );
       });
     }
@@ -554,7 +554,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (filteredLeads.length === 0) {
       leadsTableBody.innerHTML = `
         <tr>
-          <td colspan="10">
+          <td colspan="11">
             <div class="empty-state">
               <div class="empty-icon">🔍</div>
               <p>No matching leads found for "${escapeHtml(tableSearchInput.value)}".</p>
@@ -592,7 +592,7 @@ document.addEventListener('DOMContentLoaded', () => {
       let statusCell = '';
 
       if (showWeb) {
-        if (!lead.website || lead.websiteStatus === 'No Website Detected') {
+        if (!lead.website || lead.websiteStatus === 'No Website Detected' || isGoogleMapsUrl(lead.website)) {
           websiteCell = `<td><span class="badge-no-website">📵 None (Offline Lead)</span></td>`;
           statusCell = `<td><span class="badge badge-status-nowebsite">📵 No Website Detected</span></td>`;
         } else {
@@ -602,6 +602,11 @@ document.addEventListener('DOMContentLoaded', () => {
           statusCell = `<td><span class="badge badge-status-online">🟢 ${escapeHtml(lead.websiteStatus || '200 OK (Live)')}</span></td>`;
         }
       }
+
+      const sourceName = lead.source || 'Google Maps';
+      const cleanQuery = `${lead.businessName || ''} ${lead.city || ''} ${lead.state || ''}`.trim();
+      const sourceUrl = lead.sourceUrl || (lead.website && isGoogleMapsUrl(lead.website) ? lead.website : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanQuery)}`);
+      const sourceCell = `<td><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer" class="link-source" title="Open ${escapeHtml(sourceName)} Directory Listing">📍 ${escapeHtml(sourceName)} ↗</a></td>`;
 
       html += `
         <tr>
@@ -616,6 +621,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ${phoneCell}
           ${websiteCell}
           ${statusCell}
+          ${sourceCell}
           <td><span class="badge badge-industry">${escapeHtml(lead.industry)}</span></td>
           <td><span class="badge badge-verified">✓ Verified</span></td>
         </tr>

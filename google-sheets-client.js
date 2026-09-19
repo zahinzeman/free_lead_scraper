@@ -153,20 +153,30 @@ const GoogleSheetsManager = (function () {
     let syncedCount = 0;
 
     for (let i = 0; i < cleanLeads.length; i += BATCH_SIZE) {
-      const batch = cleanLeads.slice(i, i + BATCH_SIZE).map(lead => ({
-        id: lead.id,
-        country: lead.country,
-        state: lead.state || '',
-        city: lead.city || '',
-        businessName: lead.businessName,
-        ownerName: lead.ownerName || 'N/A',
-        phone: lead.phone || '',
-        website: lead.website || '',
-        websiteStatus: lead.websiteStatus || 'No Website Detected',
-        industry: lead.industry,
-        verified: Boolean(lead.verified),
-        scrapedAt: lead.scrapedAt || new Date().toISOString()
-      }));
+      const batch = cleanLeads.slice(i, i + BATCH_SIZE).map(lead => {
+        const isMaps = lead.website && /google\.[a-z.]+\/maps|maps\.google\.|goo\.gl\/maps/i.test(lead.website);
+        const cleanWeb = isMaps ? '' : (lead.website || '');
+        const cleanStatus = isMaps ? 'No Website Detected' : (lead.websiteStatus || (cleanWeb ? '200 OK (Live)' : 'No Website Detected'));
+        const cleanQuery = `${lead.businessName || ''} ${lead.city || ''} ${lead.state || ''}`.trim();
+        const sourceUrl = lead.sourceUrl || (lead.website && /google\.[a-z.]+\/maps|maps\.google\.|goo\.gl\/maps/i.test(lead.website) ? lead.website : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanQuery)}`);
+
+        return {
+          id: lead.id,
+          country: lead.country,
+          state: lead.state || '',
+          city: lead.city || '',
+          businessName: lead.businessName,
+          ownerName: lead.ownerName || 'N/A',
+          phone: lead.phone || '',
+          website: cleanWeb,
+          websiteStatus: cleanStatus,
+          source: lead.source || 'Google Maps',
+          sourceUrl: sourceUrl,
+          industry: lead.industry,
+          verified: Boolean(lead.verified),
+          scrapedAt: lead.scrapedAt || new Date().toISOString()
+        };
+      });
 
       const payload = {
         action: 'append_leads',
@@ -248,6 +258,8 @@ function doPost(e) {
         "Verified Phone",
         "Website URL",
         "Website Status",
+        "Scraped Source",
+        "Source Link",
         "Industry",
         "Verification Status",
         "Scraped At"
@@ -326,6 +338,8 @@ function doPost(e) {
         lead.phone || "",
         lead.website || "",
         lead.websiteStatus || "",
+        lead.source || "Google Maps",
+        lead.sourceUrl || "",
         lead.industry,
         lead.verified ? "Verified" : "Pending",
         lead.scrapedAt

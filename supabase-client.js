@@ -143,19 +143,29 @@ const SupabaseManager = (function () {
     let syncedCount = 0;
 
     for (let i = 0; i < cleanLeads.length; i += BATCH_SIZE) {
-      const batch = cleanLeads.slice(i, i + BATCH_SIZE).map(lead => ({
-        country: lead.country,
-        state: lead.state || '',
-        city: lead.city || '',
-        business_name: lead.businessName,
-        owner_name: lead.ownerName || '',
-        phone: lead.phone || '',
-        website: lead.website || '',
-        website_status: lead.websiteStatus || '200 OK (Live)',
-        industry: lead.industry,
-        verified: Boolean(lead.verified),
-        scraped_at: lead.scrapedAt || new Date().toISOString()
-      }));
+      const batch = cleanLeads.slice(i, i + BATCH_SIZE).map(lead => {
+        const isMaps = lead.website && /google\.[a-z.]+\/maps|maps\.google\.|goo\.gl\/maps/i.test(lead.website);
+        const cleanWeb = isMaps ? '' : (lead.website || '');
+        const cleanStatus = isMaps ? 'No Website Detected' : (lead.websiteStatus || (cleanWeb ? '200 OK (Live)' : 'No Website Detected'));
+        const cleanQuery = `${lead.businessName || ''} ${lead.city || ''} ${lead.state || ''}`.trim();
+        const sourceUrl = lead.sourceUrl || (lead.website && /google\.[a-z.]+\/maps|maps\.google\.|goo\.gl\/maps/i.test(lead.website) ? lead.website : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanQuery)}`);
+
+        return {
+          country: lead.country,
+          state: lead.state || '',
+          city: lead.city || '',
+          business_name: lead.businessName,
+          owner_name: lead.ownerName || '',
+          phone: lead.phone || '',
+          website: cleanWeb,
+          website_status: cleanStatus,
+          source: lead.source || 'Google Maps',
+          source_url: sourceUrl,
+          industry: lead.industry,
+          verified: Boolean(lead.verified),
+          scraped_at: lead.scrapedAt || new Date().toISOString()
+        };
+      });
 
       const { data, error } = await supabaseClient
         .from('leads')
@@ -199,6 +209,8 @@ create table if not exists public.leads (
   phone text,
   website text,
   website_status text default '200 OK (Live)',
+  source text default 'Google Maps',
+  source_url text,
   industry text not null,
   verified boolean default true,
   scraped_at text,

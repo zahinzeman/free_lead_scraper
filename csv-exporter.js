@@ -1,6 +1,6 @@
 /**
  * CSV Exporter Module
- * High-performance streaming CSV generator capable of exporting 70,000+ leads
+ * High-performance streaming CSV generator capable of exporting 100,000+ leads
  * into downloadable CSV without memory leaks or UI freeze.
  */
 
@@ -80,14 +80,15 @@ const CsvExporter = (function () {
       headers.push("Website Status");
     }
 
+    headers.push("Scraped Source", "Source URL");
     headers.push("Industry", "Verification Status", "Scraped At");
 
     const blobParts = [];
     blobParts.push("\uFEFF"); // UTF-8 BOM
     blobParts.push(headers.map(escapeCsvField).join(",") + "\r\n");
 
-    // Chunk in slices of 1500 for optimal memory footprint up to 70,000 items
-    const CHUNK_SIZE = 1500;
+    // Chunk in slices of 2500 for optimal memory footprint up to 100,000+ items
+    const CHUNK_SIZE = 2500;
     for (let i = 0; i < cleanLeads.length; i += CHUNK_SIZE) {
       const slice = cleanLeads.slice(i, i + CHUNK_SIZE);
       let chunkStr = "";
@@ -107,9 +108,17 @@ const CsvExporter = (function () {
         }
 
         if (includeWebsites) {
-          row.push(lead.website || "");
-          row.push(lead.websiteStatus || (lead.website ? "200 OK (Live)" : "No Website Detected"));
+          const isMaps = lead.website && /google\.[a-z.]+\/maps|maps\.google\.|goo\.gl\/maps/i.test(lead.website);
+          const cleanWeb = isMaps ? "" : (lead.website || "");
+          const cleanStatus = isMaps ? "No Website Detected" : (lead.websiteStatus || (cleanWeb ? "200 OK (Live)" : "No Website Detected"));
+          row.push(cleanWeb);
+          row.push(cleanStatus);
         }
+
+        const cleanQuery = `${lead.businessName || ''} ${lead.city || ''} ${lead.state || ''}`.trim();
+        const sourceUrl = lead.sourceUrl || (lead.website && /google\.[a-z.]+\/maps|maps\.google\.|goo\.gl\/maps/i.test(lead.website) ? lead.website : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanQuery)}`);
+        row.push(lead.source || "Google Maps");
+        row.push(sourceUrl);
 
         row.push(
           lead.industry,

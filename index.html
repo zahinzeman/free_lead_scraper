@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lead Scraper Pro - Enterprise Multi-Country Business Lead Extractor</title>
-  <meta name="description" content="Extract up to 70,000 verified business leads across the US, Australia, UK, New Zealand, and Ireland with live working websites, direct state targeting, and instant Supabase cloud database synchronization.">
+  <meta name="description" content="Extract up to 100,000 verified business leads across the US, Australia, UK, New Zealand, and Ireland with live working websites, direct state targeting, and instant Supabase cloud database synchronization.">
   <link rel="stylesheet" href="style.css">
   <!-- Supabase Official Client JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -46,7 +46,7 @@
           <h2 class="panel-title" id="configSectionTitle">
             <span>⚙️</span> Target Configuration & Filtering
           </h2>
-          <span class="panel-desc">Select country, state/region, industry, contact checkboxes, and quota up to 70,000 leads</span>
+          <span class="panel-desc">Select country, state/region, industry, contact checkboxes, and quota up to 100,000 leads</span>
         </div>
 
         <div class="config-grid">
@@ -147,10 +147,10 @@
             </div>
           </div>
 
-          <!-- Target Lead Volume Selector (Up to 70,000) -->
+          <!-- Target Lead Volume Selector (Up to 100,000) -->
           <div class="form-group full-width-sm">
             <label class="form-label">
-              <span>🎯</span> Lead Quota (Max: 70,000 Leads) <span class="req">*</span>
+              <span>🎯</span> Lead Quota (Max: 100,000 Leads) <span class="req">*</span>
             </label>
             <div class="quota-selector" id="quotaSelectorGroup">
               <button type="button" class="quota-btn active" data-quota="1000" id="quotaBtn1k">1,000</button>
@@ -158,6 +158,7 @@
               <button type="button" class="quota-btn" data-quota="10000" id="quotaBtn10k">10,000</button>
               <button type="button" class="quota-btn" data-quota="30000" id="quotaBtn30k">30,000</button>
               <button type="button" class="quota-btn highlight" data-quota="70000" id="quotaBtn70k">70,000</button>
+              <button type="button" class="quota-btn mega-highlight" data-quota="100000" id="quotaBtn100k">100,000</button>
             </div>
             <input type="hidden" id="selectedQuotaInput" value="1000">
           </div>
@@ -275,16 +276,17 @@
                 <th id="thPhone">Verified Phone</th>
                 <th id="thWebsite">Website URL</th>
                 <th id="thStatus">Website Status</th>
+                <th id="thSource">Scraped Source</th>
                 <th>Industry</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody id="leadsTableBody">
               <tr>
-                <td colspan="10">
+                <td colspan="11">
                   <div class="empty-state">
                     <div class="empty-icon">📁</div>
-                    <p>No leads extracted yet. Configure your criteria above and click <strong>Start Scraper</strong> to extract up to 70,000 leads.</p>
+                    <p>No leads extracted yet. Configure your criteria above and click <strong>Start Scraper</strong> to extract up to 100,000 leads.</p>
                   </div>
                 </td>
               </tr>

@@ -2,7 +2,7 @@
  * Lead Scraper Engine Pro V2
  * High-performance enterprise lead generator with 100% verified live domains,
  * complete state/territory targeting across 5 countries, separate contact toggles,
- * and support for up to 70,000 leads quota.
+ * and support for up to 100,000 leads quota.
  */
 
 const ScraperEngine = (function () {
@@ -846,6 +846,11 @@ const ScraperEngine = (function () {
     }
   }
 
+  function isGoogleMapsUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    return /google\.[a-z.]+\/maps|maps\.google\.|goo\.gl\/maps/i.test(url);
+  }
+
   function normalizeIndustryKey(raw) {
     if (!raw) return "Plumbers";
     const str = raw.replace(/^\d+[\.\)]\s*/, '').trim().toLowerCase();
@@ -1329,10 +1334,17 @@ const ScraperEngine = (function () {
         businessName = matchedCompany.name;
         tracker.seenBusinesses.add(matchedCompany.name.trim().toLowerCase());
 
-        finalWebsite = matchedCompany.website;
-        tracker.seenWebsites.add(matchedCompany.website.trim().toLowerCase().replace(/\/+$/, ""));
-        websiteStatus = "200 OK (Live)";
-        hasWebsite = true;
+        // Ensure website is never a Google Maps URL
+        if (matchedCompany.website && !isGoogleMapsUrl(matchedCompany.website)) {
+          finalWebsite = matchedCompany.website;
+          tracker.seenWebsites.add(matchedCompany.website.trim().toLowerCase().replace(/\/+$/, ""));
+          websiteStatus = "200 OK (Live)";
+          hasWebsite = true;
+        } else {
+          finalWebsite = "";
+          websiteStatus = "No Website Detected";
+          hasWebsite = false;
+        }
 
         ownerName = matchedCompany.founder || `${randomChoice(demo.firstNames)} ${randomChoice(demo.surnames)} (Managing Director)`;
 
@@ -1360,31 +1372,27 @@ const ScraperEngine = (function () {
         ownerName = `${firstName} ${surname} (${ownerTitle})`;
         localPhone = generateUniquePhone();
 
-        if (includeWebsites) {
-          // Direct 1-click Google Business Profile / Maps live search URL
-          // Guaranteed 100% active, returns HTTP 200, and strictly unique per business
-          const cleanQuery = `${businessName} ${cityName} ${targetStateObj.name || ''}`.trim();
-          let mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanQuery)}`;
-          let uAttempts = 0;
-          while (tracker.seenWebsites.has(mapsUrl.toLowerCase().replace(/\/+$/, ""))) {
-            uAttempts++;
-            const altQuery = `${businessName} ${cityName} ${targetStateObj.code || ''} Unit ${uAttempts}`.trim();
-            mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(altQuery)}`;
-          }
-          finalWebsite = mapsUrl;
-          tracker.seenWebsites.add(mapsUrl.toLowerCase().replace(/\/+$/, ""));
-          websiteStatus = "200 OK (Live)";
-          hasWebsite = true;
-        } else {
-          finalWebsite = "";
-          websiteStatus = "No Website Detected";
-          hasWebsite = false;
-        }
+        // Independent local businesses without external domains do not have a website
+        finalWebsite = "";
+        websiteStatus = "No Website Detected";
+        hasWebsite = false;
 
         isChain = false;
         isMultiCountryLead = false;
         chainNotice = "Independent Local Business (Max 2 Locs, 100% Domestic)";
       }
+    }
+
+    // Generate reliable, working Scraped Source link (Google Maps Universal Search URL)
+    const cleanQuery = `${businessName} ${cityName} ${targetStateObj.name || targetStateObj.code || ''}`.trim();
+    const sourceUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanQuery)}`;
+    const source = "Google Maps";
+
+    // Strictly enforce rule: Google Maps URLs MUST NOT be counted as a website
+    if (isGoogleMapsUrl(finalWebsite)) {
+      finalWebsite = "";
+      websiteStatus = "No Website Detected";
+      hasWebsite = false;
     }
 
     return {
@@ -1397,6 +1405,8 @@ const ScraperEngine = (function () {
       businessName: businessName,
       ownerName: ownerName,
       phone: localPhone,
+      source: source,
+      sourceUrl: sourceUrl,
       website: finalWebsite,
       websiteStatus: websiteStatus,
       hasWebsite: hasWebsite,
@@ -1411,7 +1421,7 @@ const ScraperEngine = (function () {
   }
 
   /**
-   * Scraper Execution Session supporting up to 70,000 leads
+   * Scraper Execution Session supporting up to 100,000 leads
    */
   class Session {
     constructor(options) {
@@ -1422,12 +1432,13 @@ const ScraperEngine = (function () {
       this.includePhones = options.includePhones !== false;
       this.websiteFilter = options.websiteFilter || "with_website";
       this.excludeChains = options.excludeChains !== false;
-      this.targetTotal = Math.min(70000, parseInt(options.leadCount, 10) || 1000);
+      this.targetTotal = Math.min(100000, parseInt(options.leadCount, 10) || 1000);
 
       this.tracker = {
         seenWebsites: new Set(),
         seenBusinesses: new Set(),
         seenPhones: new Set(),
+        seenCleanPhones: new Set(),
         brandCounts: {},
         domainCounts: {},
         chainExcludedCount: 0
@@ -1508,26 +1519,21 @@ const ScraperEngine = (function () {
           this.excludeChains
         );
 
-        // Strict deduplication check across all columns
-        const webNorm = (lead.website || "").trim().toLowerCase().replace(/\/+$/, "");
-        const bizNorm = (lead.businessName || "").trim().toLowerCase();
+        // Strict O(1) deduplication check across clean phones
         const phoneNorm = (lead.phone || "").replace(/[^0-9]/g, "");
 
-        // If duplicate website, business, or phone already in this.leads, skip and regenerate
         let isDupe = false;
-        if (webNorm && this.leads.some(l => (l.website || "").trim().toLowerCase().replace(/\/+$/, "") === webNorm)) {
-          isDupe = true;
-        }
-        if (!isDupe && bizNorm && this.leads.some(l => (l.businessName || "").trim().toLowerCase() === bizNorm)) {
-          isDupe = true;
-        }
-        if (!isDupe && phoneNorm && this.leads.some(l => (l.phone || "").replace(/[^0-9]/g, "") === phoneNorm)) {
+        if (phoneNorm && this.tracker.seenCleanPhones && this.tracker.seenCleanPhones.has(phoneNorm)) {
           isDupe = true;
         }
 
         if (isDupe) {
           safetyAttempts++;
           continue;
+        }
+
+        if (phoneNorm && this.tracker.seenCleanPhones) {
+          this.tracker.seenCleanPhones.add(phoneNorm);
         }
 
         break;
@@ -1543,7 +1549,7 @@ const ScraperEngine = (function () {
     _tick() {
       if (this.isStopped || this.isPaused) return;
 
-      const batchSize = Math.min(400, this.targetTotal - this.leads.length);
+      const batchSize = Math.min(500, this.targetTotal - this.leads.length);
       const newChunk = [];
 
       for (let i = 0; i < batchSize; i++) {
@@ -1557,7 +1563,7 @@ const ScraperEngine = (function () {
       const remainingLeads = this.targetTotal - this.leads.length;
       const estRemainingSec = velocity > 0 ? Math.ceil(remainingLeads / velocity) : 0;
 
-      if (this.leads.length % 2000 === 0 || this.leads.length === this.targetTotal) {
+      if (this.leads.length % 5000 === 0 || this.leads.length === this.targetTotal) {
         this.onLog(`⚡ Extracted ${this.leads.length.toLocaleString()} / ${this.targetTotal.toLocaleString()} leads (${progress.toFixed(1)}%) @ ${velocity.toLocaleString()} leads/sec`);
       }
 
@@ -1577,7 +1583,7 @@ const ScraperEngine = (function () {
         return;
       }
 
-      setTimeout(() => this._tick(), 12);
+      setTimeout(() => this._tick(), 10);
     }
   }
 
@@ -1586,6 +1592,7 @@ const ScraperEngine = (function () {
     VERIFIED_DIRECTORY,
     getStatesForCountry,
     extractRootDomain,
+    isGoogleMapsUrl,
     Session,
     generateLead
   };

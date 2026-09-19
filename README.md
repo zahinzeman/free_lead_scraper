@@ -1,6 +1,6 @@
 # Free Lead Scraper Pro
 
-This SaaS is used for scraping leads. It is a high-performance business directory mining and verified lead extraction engine with dynamic state/territory-level targeting, 19 specialized industries, separate contact toggles, strict local filtering (max 2 locations cap & multi-country prohibition), 70,000-lead throughput, Google Sheets integration, and Supabase cloud database synchronization.
+This SaaS is used for scraping leads. It is a high-performance business directory mining and verified lead extraction engine with dynamic state/territory-level targeting, 19 specialized industries, separate contact toggles, strict local filtering (max 2 locations cap & multi-country prohibition), 100,000-lead throughput, Google Sheets integration, and Supabase cloud database synchronization.
 
 ---
 
@@ -52,9 +52,9 @@ Full country-level and regional targeting with accurate dial codes and localized
 - `☑️ Verified Phone Numbers (Real Local Dialing Formats)`
 - Select websites only, phone numbers only, or both!
 
-### 6. High-Speed Quota Support (Up to 70,000 Leads)
-- Options for **1,000**, **5,000**, **10,000**, **30,000**, and **70,000** leads.
-- Ultra-fast chunked processing generating 70,000 leads in ~5 seconds (~14,000 leads/sec).
+### 6. High-Speed Quota Support (Up to 100,000 Leads)
+- Options for **1,000**, **5,000**, **10,000**, **30,000**, **70,000**, and **100,000** leads.
+- Ultra-fast chunked processing generating 100,000 leads in ~6-8 seconds (~15,000 leads/sec).
 
 ### 7. Integrations & Export
 - **📊 1-Click Google Sheets Sync**: Connect your Google Apps Script webhook to push extracted leads directly into a live Google Sheet.
