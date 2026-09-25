@@ -200,6 +200,31 @@ const ScraperEngine = (function () {
         const last = Math.floor(1000 + Math.random() * 9000);
         return `+46 ${dial} ${mid} ${last}`;
       }
+    },
+    "Netherlands": {
+      code: "+31",
+      flag: "🇳🇱",
+      states: [
+        { name: "All Provinces (Countrywide)", code: "ALL" },
+        { name: "North Holland", code: "NH", cities: ["Amsterdam", "Haarlem", "Alkmaar", "Hilversum", "Zaandam", "Amstelveen"], dialCode: "20" },
+        { name: "South Holland", code: "ZH", cities: ["Rotterdam", "The Hague", "Leiden", "Delft", "Dordrecht", "Gouda"], dialCode: "10" },
+        { name: "Utrecht", code: "UT", cities: ["Utrecht", "Amersfoort", "Veenendaal", "Zeist", "Nieuwegein"], dialCode: "30" },
+        { name: "North Brabant", code: "NB", cities: ["Eindhoven", "Tilburg", "Breda", "'s-Hertogenbosch", "Helmond"], dialCode: "40" },
+        { name: "Gelderland", code: "GE", cities: ["Nijmegen", "Arnhem", "Apeldoorn", "Ede", "Barneveld"], dialCode: "24" },
+        { name: "Overijssel", code: "OV", cities: ["Enschede", "Zwolle", "Deventer", "Hengelo", "Almelo"], dialCode: "53" },
+        { name: "Limburg", code: "LI", cities: ["Maastricht", "Venlo", "Sittard", "Heerlen", "Roermond"], dialCode: "43" },
+        { name: "Friesland", code: "FR", cities: ["Leeuwarden", "Drachten", "Sneek", "Heerenveen"], dialCode: "58" },
+        { name: "Groningen", code: "GR", cities: ["Groningen", "Hoogezand", "Stadskanaal", "Veendam"], dialCode: "50" },
+        { name: "Drenthe", code: "DR", cities: ["Assen", "Emmen", "Hoogeveen", "Meppel"], dialCode: "592" },
+        { name: "Zeeland", code: "ZL", cities: ["Middelburg", "Vlissingen", "Goes", "Terneuzen"], dialCode: "118" },
+        { name: "Flevoland", code: "FL", cities: ["Almere", "Lelystad", "Dronten", "Emmeloord"], dialCode: "36" }
+      ],
+      formatPhone: function (cityObj, stateObj) {
+        const dial = (stateObj && stateObj.dialCode) ? stateObj.dialCode : "20";
+        const mid = Math.floor(200 + Math.random() * 700);
+        const last = Math.floor(1000 + Math.random() * 9000);
+        return `+31 ${dial} ${mid} ${last}`;
+      }
     }
   };
 
@@ -243,6 +268,11 @@ const ScraperEngine = (function () {
         { name: "Bravida Sverige VVS", website: "https://www.bravida.se", founder: "Mattias Johansson (CEO)", defaultPhone: "+46 8 695 2000" },
         { name: "Assemblin VS Sverige", website: "https://www.assemblin.com", founder: "Mats Johansson (President & CEO)", defaultPhone: "+46 10 472 6000" },
         { name: "Rörjouren Sverige", website: "https://www.rorjouren.se", founder: "Johan Lundqvist (Managing Director)", defaultPhone: "+46 8 449 0600" }
+      ],
+      "Netherlands": [
+        { name: "Feenstra Verwarming & Sanitair", website: "https://www.feenstra.com", founder: "Dirk Feenstra (Oprichter)", defaultPhone: "+31 88 845 5000" },
+        { name: "Bonarius Installatiebedrijven", website: "https://www.bonarius.com", founder: "Wim Bonarius (Directeur)", defaultPhone: "+31 88 115 1000" },
+        { name: "RRS Riool Reinigings Service", website: "https://www.rrs.nl", founder: "Peter van der Wal (Directeur)", defaultPhone: "+31 800 099 1313" }
       ]
     },
     "Electricians": {
@@ -288,6 +318,11 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Elektro-Emanuel Sverige", website: "https://www.elektro-emanuel.se", founder: "Anders Emanuelsson (VD)", defaultPhone: "+46 320 20 90 00" },
         { name: "Elkedjan Sverige", website: "https://www.elkedjan.se", founder: "Tomas Hörnfeldt (VD)", defaultPhone: "+46 36 34 80 00" }
+      ],
+      "Netherlands": [
+        { name: "Croonwolter&dros Elektrotechniek", website: "https://www.croonwolterendros.nl", founder: "Mark van de Sanden (Directie)", defaultPhone: "+31 88 923 0000" },
+        { name: "Batenburg Installatietechniek", website: "https://www.batenburg.nl", founder: "Ralph van den Broek (CEO)", defaultPhone: "+31 10 292 8080" },
+        { name: "Modderkolk Service & Onderhoud", website: "https://www.modderkolk.nl", founder: "Simon de Ridder (Directeur)", defaultPhone: "+31 24 678 2000" }
       ]
     },
     "HVAC": {
@@ -320,6 +355,11 @@ const ScraperEngine = (function () {
         { name: "Daikin Sweden Klimat", website: "https://www.daikin.se", founder: "Mikael Lindqvist (Managing Director)", defaultPhone: "+46 8 445 5000" },
         { name: "Caverion Sverige Värme", website: "https://www.caverion.se", founder: "Uno Lundberg (VD)", defaultPhone: "+46 8 705 3000" },
         { name: "NIBE Energy Systems", website: "https://www.nibe.se", founder: "Gerteric Lindquist (CEO)", defaultPhone: "+46 433 273 000" }
+      ],
+      "Netherlands": [
+        { name: "Breman Klimaatinstallaties", website: "https://www.breman.nl", founder: "Reind Breman (Oprichter)", defaultPhone: "+31 38 385 8585" },
+        { name: "Kuijpers Klimaat & Duurzaam", website: "https://www.kuijpers.nl", founder: "Aukje Kuypers (Algemeen Directeur)", defaultPhone: "+31 492 576 666" },
+        { name: "Kemkens Verwarming & Airco", website: "https://www.kemkens.nl", founder: "Joep Kemkens (Directeur)", defaultPhone: "+31 88 505 0300" }
       ]
     },
     "Landscapers": {
@@ -350,6 +390,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Svevia Landscaping Sverige", website: "https://www.svevia.se", founder: "Anders Gustafsson (CEO)", defaultPhone: "+46 8 404 1000" },
         { name: "Green Landscaping Group", website: "https://www.greenlandscaping.se", founder: "Johan Nordström (CEO)", defaultPhone: "+46 8 500 0000" }
+      ],
+      "Netherlands": [
+        { name: "Donker Groen Hoveniers", website: "https://www.donkergroep.com", founder: "Hein Donker (Oprichter)", defaultPhone: "+31 515 429 200" },
+        { name: "Koninklijke Ginkel Groep", website: "https://www.ginkelgroep.nl", founder: "Jan van Ginkel (Directeur)", defaultPhone: "+31 318 584 700" }
       ]
     },
     "Pest Control": {
@@ -376,6 +420,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Anticimex Sverige", website: "https://www.anticimex.se", founder: "Jarl Dahlfors (CEO)", defaultPhone: "+46 75 245 1000" },
         { name: "Nomor Sverige", website: "https://www.nomor.se", founder: "Henrik Hallberg (Managing Director)", defaultPhone: "+46 771 122 300" }
+      ],
+      "Netherlands": [
+        { name: "Traas Ongediertebestrijding", website: "https://www.traasongediertebestrijding.nl", founder: "Erwin Traas (Directeur)", defaultPhone: "+31 88 221 2122" },
+        { name: "Attack Pest Control Nederland", website: "https://www.attack.nl", founder: "Kees de Jong (Directeur)", defaultPhone: "+31 88 008 1900" }
       ]
     },
     "Cleaning Services": {
@@ -406,6 +454,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Hemfrid Sverige Städning", website: "https://www.hemfrid.se", founder: "Monica Lindstedt (Founder)", defaultPhone: "+46 10 555 8500" },
         { name: "Hemsol Städ & Service", website: "https://www.hemsol.se", founder: "Stefan Larsson (VD)", defaultPhone: "+46 8 500 1000" }
+      ],
+      "Netherlands": [
+        { name: "CSU Schoonmaakdiensten", website: "https://www.csu.nl", founder: "John van Hoof (Voorzitter RvC)", defaultPhone: "+31 413 285 111" },
+        { name: "Asito Schoonmaakbedrijf", website: "https://www.asito.nl", founder: "Bob Mols (Algemeen Directeur)", defaultPhone: "+31 546 484 950" }
       ]
     },
     "Handymen": {
@@ -436,6 +488,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Veteranpoolen Sverige Hantverk", website: "https://www.veteranpoolen.se", founder: "Mats Claesson (CEO)", defaultPhone: "+46 31 18 88 20" },
         { name: "Rent A Grandad Hantverk", website: "https://www.rentagrandad.se", founder: "Lars Olsson (Grundare)", defaultPhone: "+46 8 400 2000" }
+      ],
+      "Netherlands": [
+        { name: "De Klussenier Nederland", website: "https://www.klussenier.nl", founder: "Henk van der Wal (Directeur)", defaultPhone: "+31 38 385 6480" },
+        { name: "Werkspot Vakmensen", website: "https://www.werkspot.nl", founder: "Ronald Egas (CEO)", defaultPhone: "+31 88 244 4800" }
       ]
     },
     "Locksmiths": {
@@ -466,6 +522,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Låscenter Sverige", website: "https://www.lascenter.se", founder: "Göran Karlsson (VD)", defaultPhone: "+46 8 600 5000" },
         { name: "Certego Säkerhet & Lås", website: "https://www.certego.se", founder: "Jonas Granath (CEO)", defaultPhone: "+46 21 10 97 00" }
+      ],
+      "Netherlands": [
+        { name: "Locksecure Slotenmakers", website: "https://www.locksecure.nl", founder: "Marco van Veen (Eigenaar)", defaultPhone: "+31 85 065 6777" },
+        { name: "Slotenmaker Expert Nederland", website: "https://www.slotenmakerexpert.nl", founder: "Dennis Bakker (Directeur)", defaultPhone: "+31 85 060 6226" }
       ]
     },
     "Independent Accountants": {
@@ -497,6 +557,11 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "FAR Auktoriserade Revisorer", website: "https://www.far.se", founder: "Karin Apelman (Generalsekreterare)", defaultPhone: "+46 8 506 112 00" },
         { name: "Aspia Redovisning & Rådgivning", website: "https://www.aspia.se", founder: "Ola Camber (VD)", defaultPhone: "+46 10 250 0000" }
+      ],
+      "Netherlands": [
+        { name: "De Jong & Laan Accountants", website: "https://www.jonglaan.nl", founder: "Roland Ogink (Directievoorzitter)", defaultPhone: "+31 546 549 555" },
+        { name: "Flynth Adviseurs en Accountants", website: "https://www.flynth.nl", founder: "Bas Hidding (Bestuursvoorzitter)", defaultPhone: "+31 88 236 7700" },
+        { name: "Alfa Accountants en Adviseurs", website: "https://www.alfa.nl", founder: "Fou-Khan Tsang (Voorzitter RvB)", defaultPhone: "+31 88 253 1000" }
       ]
     },
     "Real Estate Agents": {
@@ -529,6 +594,76 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Fastighetsbyrån Sverige", website: "https://www.fastighetsbyran.se", founder: "Johan Engström (VD)", defaultPhone: "+46 8 54 54 55 00" },
         { name: "Svensk Fastighetsförmedling", website: "https://www.svenskfast.se", founder: "Liza Nyberg (VD)", defaultPhone: "+46 8 505 358 00" }
+      ],
+      "Netherlands": [
+        { name: "Makelaarsland Nederland", website: "https://www.makelaarsland.nl", founder: "Ietse Prins (Directeur)", defaultPhone: "+31 88 200 2000" },
+        { name: "Garantiemakelaars Nederland", website: "https://www.garantiemakelaars.nl", founder: "Frank van der Linden (Directeur)", defaultPhone: "+31 88 224 4000" }
+      ]
+    },
+    "Architects": {
+      "United States": [
+        { name: "Olson Kundig Architects", website: "https://www.olsonkundig.com", founder: "Jim Olson & Tom Kundig (Owners)", defaultPhone: "+1 (206) 624-5645" },
+        { name: "Marmol Radziner Architecture", website: "https://www.marmol-radziner.com", founder: "Leo Marmol (Managing Principal)", defaultPhone: "+1 (310) 826-4222" }
+      ],
+      "Australia": [
+        { name: "COX Architecture Australia", website: "https://www.coxarchitecture.com.au", founder: "Philip Cox (Founder)", defaultPhone: "+61 2 9267 9599" },
+        { name: "Bates Smart Architecture", website: "https://www.batessmart.com", founder: "Joseph Reed (Historical Founder)", defaultPhone: "+61 3 8664 6200" }
+      ],
+      "United Kingdom": [
+        { name: "Foster + Partners Architecture", website: "https://www.fosterandpartners.com", founder: "Norman Foster (Executive Chairman)", defaultPhone: "+44 20 7738 0455" },
+        { name: "BDP Building Design Partnership", website: "https://www.bdp.com", founder: "George Grenfell Baines (Founder)", defaultPhone: "+44 161 828 2200" }
+      ],
+      "New Zealand": [
+        { name: "Warren and Mahoney Architects", website: "https://www.warrenandmahoney.com", founder: "Miles Warren (Founder)", defaultPhone: "+64 9 309 8375" },
+        { name: "Jasmax Architecture Studio", website: "https://www.jasmax.com", founder: "Tim Hooson (Principal)", defaultPhone: "+64 9 367 7500" }
+      ],
+      "Ireland": [
+        { name: "RIAI Architects Institute", website: "https://www.riai.ie", founder: "Kathryn Meghen (CEO)", defaultPhone: "+353 1 676 1703" },
+        { name: "Henry J Lyons Architects", website: "https://www.henryjlyons.com", founder: "Henry J Lyons (Founder)", defaultPhone: "+353 1 676 7451" }
+      ],
+      "Sweden": [
+        { name: "White Arkitekter Sverige", website: "https://www.whitearkitekter.com", founder: "Sidney White (Founder)", defaultPhone: "+46 8 402 25 00" },
+        { name: "Tengbom Arkitekter", website: "https://www.tengbom.se", founder: "Ivar Tengbom (Historical Founder)", defaultPhone: "+46 8 410 350 00" }
+      ],
+      "Netherlands": [
+        { name: "MVRDV Architects Rotterdam", website: "https://www.mvrdv.com", founder: "Winy Maas & Jacob van Rijs (Founders)", defaultPhone: "+31 10 477 2860" },
+        { name: "UNStudio Architecture Amsterdam", website: "https://www.unstudio.com", founder: "Ben van Berkel (Founder & Principal)", defaultPhone: "+31 20 570 2040" },
+        { name: "Mecanoo Architecten Delft", website: "https://www.mecanoo.nl", founder: "Francine Houben (Creative Director)", defaultPhone: "+31 15 279 8100" }
+      ]
+    },
+    "Interior Design": {
+      "United States": [
+        { name: "Studio McGee Design", website: "https://studio-mcgee.com", founder: "Shea & Syd McGee (Founders)", defaultPhone: "+1 (385) 388-8547" },
+        { name: "Kelly Wearstler Design Studio", website: "https://www.kellywearstler.com", founder: "Kelly Wearstler (Founder & Principal)", defaultPhone: "+1 (323) 951-7454" },
+        { name: "Nate Berkus Associates", website: "https://nateberkus.com", founder: "Nate Berkus (Founder)", defaultPhone: "+1 (312) 492-7400" },
+        { name: "Gensler Interior Architecture", website: "https://www.gensler.com", founder: "Art Gensler (Founder)", defaultPhone: "+1 (415) 433-3700" }
+      ],
+      "Australia": [
+        { name: "Hare & Klein Interior Design", website: "https://www.hareklein.com.au", founder: "Meryl Hare (Principal & Founder)", defaultPhone: "+61 2 9362 3133" },
+        { name: "SJB Interiors Australia", website: "https://www.sjb.com.au", founder: "Kirsten Stanisich (Director)", defaultPhone: "+61 3 9347 3866" },
+        { name: "Arent&Pyke Interior Design", website: "https://arentpyke.com", founder: "Juliette Arent & Sarah-Jane Pyke (Principals)", defaultPhone: "+61 2 9331 6660" }
+      ],
+      "United Kingdom": [
+        { name: "Tara Bernerd & Partners", website: "https://www.tarabernerd.com", founder: "Tara Bernerd (Founder)", defaultPhone: "+44 20 7247 5599" },
+        { name: "Richmond International Interior Design", website: "https://www.richmond-int.com", founder: "Fiona Thompson (Principal)", defaultPhone: "+44 20 7378 2400" },
+        { name: "Laura Hammett Interiors", website: "https://www.laurahammett.com", founder: "Laura & Aaron Hammett (Founders)", defaultPhone: "+44 20 8540 8659" }
+      ],
+      "New Zealand": [
+        { name: "Rufus Knight Interior Architecture", website: "https://knightassociates.co.nz", founder: "Rufus Knight (Principal)", defaultPhone: "+64 9 377 6499" },
+        { name: "Mal Corboy Interior Design", website: "https://www.malcorboy.com", founder: "Mal Corboy (Principal)", defaultPhone: "+64 9 521 7167" }
+      ],
+      "Ireland": [
+        { name: "Kingston Lafferty Design", website: "https://kingstonlaffertydesign.com", founder: "Róisín Lafferty (Founder & Creative Director)", defaultPhone: "+353 1 450 7820" },
+        { name: "Helen Turkington Interiors", website: "https://helenturkington.com", founder: "Helen Turkington (Principal)", defaultPhone: "+353 1 294 8880" }
+      ],
+      "Sweden": [
+        { name: "Note Design Studio Stockholm", website: "https://notedesignstudio.se", founder: "Cristiano Pigazzini (Founder)", defaultPhone: "+46 8 644 60 50" },
+        { name: "Joyn Studio Inredningsarkitektur", website: "https://joynstudio.se", founder: "Lisa Kjellander (Medgrundare)", defaultPhone: "+46 8 500 0000" }
+      ],
+      "Netherlands": [
+        { name: "Studio Piet Boon Interior Design", website: "https://pietboon.com", founder: "Piet Boon (Founder & Designer)", defaultPhone: "+31 20 722 0020" },
+        { name: "Eric Kuster Metropolitan Luxury", website: "https://erickuster.com", founder: "Eric Kuster (Creative Director)", defaultPhone: "+31 35 695 6280" },
+        { name: "Framework Studio Interior Architecture", website: "https://www.framework-studio.com", founder: "Thomas Geerlings (Founder)", defaultPhone: "+31 20 845 8489" }
       ]
     },
     "Architects, Interior Designers": {
@@ -555,6 +690,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "White Arkitekter Sverige", website: "https://www.whitearkitekter.com", founder: "Sidney White (Founder)", defaultPhone: "+46 8 402 25 00" },
         { name: "Tengbom Arkitekter", website: "https://www.tengbom.se", founder: "Ivar Tengbom (Historical Founder)", defaultPhone: "+46 8 410 350 00" }
+      ],
+      "Netherlands": [
+        { name: "MVRDV Architects Rotterdam", website: "https://www.mvrdv.com", founder: "Winy Maas & Jacob van Rijs (Founders)", defaultPhone: "+31 10 477 2860" },
+        { name: "Studio Piet Boon Interior Design", website: "https://pietboon.com", founder: "Piet Boon (Founder & Designer)", defaultPhone: "+31 20 722 0020" }
       ]
     },
     "Massage Therapists": {
@@ -581,6 +720,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Hagabadet Spa & Massage", website: "https://www.hagabadet.se", founder: "Pelle Johansson (VD)", defaultPhone: "+46 31 60 06 00" },
         { name: "Centralbadet Stockholm", website: "https://www.centralbadet.se", founder: "Wilhelm Klemming (Historical Founder)", defaultPhone: "+46 8 545 213 00" }
+      ],
+      "Netherlands": [
+        { name: "Het Massagehuys Amsterdam", website: "https://massagehuys.nl", founder: "Ruud van der Peet (Oprichter)", defaultPhone: "+31 20 486 9414" },
+        { name: "City Spa & Retreat Nederland", website: "https://www.cityretreat.nl", founder: "Sophie van Leeuwen (Eigenaresse)", defaultPhone: "+31 10 414 1111" }
       ]
     },
     "Chiropractors": {
@@ -609,6 +752,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Legitimerade Kiropraktorers Riksförbund", website: "https://www.kiropraktik.se", founder: "Fredrik Lundin (Ordförande)", defaultPhone: "+46 8 718 10 00" },
         { name: "Kiropraktorkliniken Sverige", website: "https://www.kiropraktorkliniken.se", founder: "Stefan Svensson (Klinikchef)", defaultPhone: "+46 8 30 20 00" }
+      ],
+      "Netherlands": [
+        { name: "Chiropractie Centraal Nederland", website: "https://chiropractiecentraal.nl", founder: "Dr. Mark Brouwer (Directeur)", defaultPhone: "+31 30 231 9933" },
+        { name: "Rugcentrum Nederland Chiropractie", website: "https://www.rugcentrum.nl", founder: "Pieter Jansen (Kliniekleider)", defaultPhone: "+31 88 003 4500" }
       ]
     },
     "Physiotherapists": {
@@ -638,6 +785,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Fysioterapeuterna Sverige", website: "https://www.fysioterapeuterna.se", founder: "Cecilia Winberg (Ordförande)", defaultPhone: "+46 8 567 061 00" },
         { name: "Aleris Fysioterapi", website: "https://www.aleris.se", founder: "Sofia Palmquist (VD)", defaultPhone: "+46 8 690 60 00" }
+      ],
+      "Netherlands": [
+        { name: "FysioHolland Praktijken", website: "https://fysioholland.nl", founder: "Michiel Westerveld (Directeur)", defaultPhone: "+31 88 374 0000" },
+        { name: "Fysiogroep Nederland", website: "https://www.fysiogroep.nl", founder: "Lars de Boer (Praktijkhouder)", defaultPhone: "+31 20 665 4488" }
       ]
     },
     "Independent Dental/Medical Clinics (Single-Location)": {
@@ -664,6 +815,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Praktikertjänst Tandvård", website: "https://www.ptj.se", founder: "Carina Olson (VD)", defaultPhone: "+46 8 789 40 00" },
         { name: "Folktandvården Sverige", website: "https://www.folktandvarden.se", founder: "Eva Ljung (VD)", defaultPhone: "+46 8 123 150 00" }
+      ],
+      "Netherlands": [
+        { name: "Tandartsenpraktijk St. Vitus", website: "https://www.tandartsenpraktijk.nl", founder: "Dr. Daan van Dijk (Tandarts-Directeur)", defaultPhone: "+31 35 624 5500" },
+        { name: "Dental Clinics Nederland", website: "https://www.dentalclinics.nl", founder: "Marijn Peters (Klinisch Directeur)", defaultPhone: "+31 35 699 8080" }
       ]
     },
     "Bakeries": {
@@ -694,6 +849,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Bröd & Salt Bageri", website: "https://www.brodsalt.se", founder: "Peter Kjellström (VD & Grundare)", defaultPhone: "+46 8 214 000" },
         { name: "Fabrique Stenugnsbageri", website: "https://www.fabrique.se", founder: "David Zetterström (Grundare)", defaultPhone: "+46 8 39 12 00" }
+      ],
+      "Netherlands": [
+        { name: "Bakkerij van Vessem", website: "https://www.vanvessem.nl", founder: "Jos van Vessem (Meesterbakker)", defaultPhone: "+31 23 528 2437" },
+        { name: "Het Vlaamsch Broodhuys", website: "https://www.vlaamschbroodhuys.nl", founder: "Dimitri Roels (Meesterbakker & Oprichter)", defaultPhone: "+31 10 477 7478" }
       ]
     },
     "Independent Auto Repair Shops": {
@@ -723,6 +882,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Mekonomen Bilverkstad", website: "https://www.mekonomen.se", founder: "Pehr Oscarson (VD)", defaultPhone: "+46 771 72 00 00" },
         { name: "MECA Bilservice Sverige", website: "https://www.meca.se", founder: "Johan Stern (VD)", defaultPhone: "+46 8 500 2000" }
+      ],
+      "Netherlands": [
+        { name: "Vakgarage Nederland", website: "https://www.vakgarage.nl", founder: "Christien den Uil (Directeur)", defaultPhone: "+31 33 454 4400" },
+        { name: "James Auto Service Nederland", website: "https://www.jamesautoservice.nl", founder: "Denis van Altena (Directeur)", defaultPhone: "+31 88 526 3700" }
       ]
     },
     "Detailing Services": {
@@ -750,6 +913,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Ditec Bilvård Sverige", website: "https://www.ditec.se", founder: "Gert Hallberg (VD)", defaultPhone: "+46 8 500 3000" },
         { name: "Mr CAP Bilförädling", website: "https://www.mrcap.se", founder: "Kaj Dahlgren (Grundare)", defaultPhone: "+46 8 544 700 00" }
+      ],
+      "Netherlands": [
+        { name: "Car Care Nederland Detailing", website: "https://www.carcare.nl", founder: "Sander Visser (Master Detailer)", defaultPhone: "+31 10 462 6000" },
+        { name: "Jurgh Car Detailing Nederland", website: "https://www.jurghcardetailing.nl", founder: "Jurgen van der Helm (Eigenaar)", defaultPhone: "+31 172 748 000" }
       ]
     },
     "Event Planners": {
@@ -776,6 +943,10 @@ const ScraperEngine = (function () {
       "Sweden": [
         { name: "Stureplansgruppen Event", website: "https://www.stureplansgruppen.se", founder: "Vimal Kovac (CEO)", defaultPhone: "+46 8 545 076 50" },
         { name: "Hansen Event Sverige", website: "https://www.hansen.se", founder: "Niclas Hansen (VD)", defaultPhone: "+46 31 10 50 00" }
+      ],
+      "Netherlands": [
+        { name: "D&B Eventmarketing Nederland", website: "https://www.db-eventmarketing.nl", founder: "Pieter Bas Boertje (Directeur)", defaultPhone: "+31 343 552 233" },
+        { name: "Obsession Evenementen & Communicatie", website: "https://www.obsession.nl", founder: "Sonja Docter (Creative Director)", defaultPhone: "+31 71 523 0000" }
       ]
     }
   };
@@ -833,6 +1004,10 @@ const ScraperEngine = (function () {
     "Sweden": {
       firstNames: ["Lars", "Mikael", "Anders", "Johan", "Erik", "Per", "Karl", "Peter", "Jan", "Fredrik", "Niklas", "Henrik", "Magnus", "Daniel", "Gustav", "Alexander", "Stefan", "Björn"],
       surnames: ["Andersson", "Johansson", "Karlsson", "Nilsson", "Eriksson", "Larsson", "Olsson", "Persson", "Svensson", "Gustafsson", "Pettersson", "Jonsson", "Jansson", "Hansson", "Bengtsson", "Lindberg", "Magnusson", "Lindqvist"]
+    },
+    "Netherlands": {
+      firstNames: ["Jan", "Pieter", "Daan", "Lucas", "Sem", "Milan", "Levi", "Liam", "Finn", "Jesse", "Bram", "Luuk", "Lars", "Thijs", "Ruben", "Sander", "Maarten", "Niels", "Sven", "Willem"],
+      surnames: ["de Jong", "Jansen", "de Vries", "van den Berg", "van Dijk", "Bakker", "Janssen", "Visser", "Smit", "Meijer", "de Boer", "Mulder", "de Groot", "Bos", "Vos", "Peters", "Hendriks", "van Leeuwen", "Dekker", "Brouwer"]
     }
   };
 
@@ -864,7 +1039,9 @@ const ScraperEngine = (function () {
     if (str.includes("locksmith")) return "Locksmiths";
     if (str.includes("account")) return "Independent Accountants";
     if (str.includes("real estate") || str.includes("realt") || str.includes("estate agent")) return "Real Estate Agents";
-    if (str.includes("architect") || str.includes("interior design")) return "Architects, Interior Designers";
+    if (str.includes("interior design") && !str.includes("architect")) return "Interior Design";
+    if (str.includes("interior design")) return "Interior Design";
+    if (str.includes("architect")) return "Architects";
     if (str.includes("massage")) return "Massage Therapists";
     if (str.includes("chiro")) return "Chiropractors";
     if (str.includes("physio")) return "Physiotherapists";
@@ -1008,6 +1185,25 @@ const ScraperEngine = (function () {
       "{Surname} & Partners Realty",
       "{City} Community Real Estate Firm"
     ],
+    "Architects": [
+      "{Surname} Architectural Design Studio",
+      "{Surname} & Partners Architecture Workshop",
+      "{City} Contemporary Architecture Practice",
+      "{Surname} Space & Building Planning",
+      "{City} Heritage Architecture Workshop",
+      "{Surname} & Associates Architectural Studio",
+      "{City} Urban Architecture Studio"
+    ],
+    "Interior Design": [
+      "{Surname} Interior Design Studio",
+      "{Surname} & Associates Interior Architecture",
+      "{City} Bespoke Interior Styling",
+      "{Surname} Living Spaces & Interiors",
+      "{City} Architectural Interior Design",
+      "{Surname} Studio of Interior Concepts",
+      "{City} Luxury Residential Interiors",
+      "{Surname} Commercial & Home Interiors"
+    ],
     "Architects, Interior Designers": [
       "{Surname} Architectural Design Studio",
       "{Surname} & Partners Architecture & Interiors",
@@ -1103,6 +1299,18 @@ const ScraperEngine = (function () {
       "Licensed Real Estate Broker",
       "Agency Director & Founder",
       "Managing Partner"
+    ],
+    "Architects": [
+      "Principal Architect & Founder",
+      "Creative Director & Lead Architect",
+      "Senior Partner & Architect",
+      "Managing Principal"
+    ],
+    "Interior Design": [
+      "Principal Interior Designer & Founder",
+      "Creative Director & Lead Designer",
+      "Lead Interior Architect & Owner",
+      "Senior Interior Stylist & Partner"
     ],
     "Architects, Interior Designers": [
       "Principal Architect & Founder",

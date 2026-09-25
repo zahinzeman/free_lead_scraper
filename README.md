@@ -1,13 +1,13 @@
 # Free Lead Scraper Pro
 
-This SaaS is used for scraping leads. It is a high-performance business directory mining and verified lead extraction engine with dynamic state/territory-level targeting, 19 specialized industries, separate contact toggles, strict local filtering (max 2 locations cap & multi-country prohibition), 100,000-lead throughput, Google Sheets integration, and Supabase cloud database synchronization.
+This SaaS is used for scraping leads. It is a high-performance business directory mining and verified lead extraction engine with dynamic state/territory-level targeting, 20 specialized industries, separate contact toggles, strict local filtering (max 2 locations cap & multi-country prohibition), 100,000-lead throughput, Google Sheets integration, and Supabase cloud database synchronization.
 
 ---
 
 ## 🌟 Key Features
 
-### 1. 19 Specialized Industries
-Target genuine independent businesses across 19 dedicated sectors:
+### 1. 20 Specialized Industries
+Target genuine independent businesses across 20 dedicated sectors:
 1. **Plumbers**
 2. **Electricians**
 3. **HVAC**
@@ -18,7 +18,7 @@ Target genuine independent businesses across 19 dedicated sectors:
 8. **Locksmiths**
 9. **Independent Accountants**
 10. **Real Estate Agents**
-11. **Architects, Interior Designers**
+11. **Architects**
 12. **Massage Therapists**
 13. **Chiropractors**
 14. **Physiotherapists**
@@ -27,6 +27,7 @@ Target genuine independent businesses across 19 dedicated sectors:
 17. **Independent Auto Repair Shops**
 18. **Detailing Services**
 19. **Event Planners**
+20. **Interior Design**
 
 ### 2. Multi-Country Market Coverage
 Full country-level and regional targeting with accurate dial codes and localized directory datasets:
@@ -36,6 +37,7 @@ Full country-level and regional targeting with accurate dial codes and localized
 - 🇳🇿 **New Zealand** (Auckland, Canterbury, Wellington, Waikato, etc.)
 - 🇮🇪 **Ireland** (County Dublin, Cork, Galway, Limerick, Waterford, etc.)
 - 🇸🇪 **Sweden** (Stockholm, Skåne, Västra Götaland, Uppsala, etc.)
+- 🇳🇱 **Netherlands** (North Holland, South Holland, Utrecht, North Brabant, Gelderland, Overijssel, etc.)
 
 ### 3. 🛡️ Strict Local Filter (Max 2 Locations & No Multi-Country)
 - **Max 2 Locations Hard Cap**: Businesses appearing more than 2 times in the dataset are strictly excluded and substituted with authentic independent domestic contractors to ensure true local businesses.
