@@ -1,22 +1,24 @@
 /**
- * Lead Scraper Pro V2 - Application Controller
- * Handles multi-country state selection, separate contact toggles,
- * up to 100,000 leads extraction, and Supabase cloud synchronization.
+ * Free Lead Scraper - Application Controller
+ * Connects frontend UI to real-data SSE streaming backend (/api/stream-scrape),
+ * dynamically loads provider allowlists, manages verification tabs, and handles exports.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-  // DOM Element References
+  // Form Controls
   const countrySelect = document.getElementById('countrySelect');
   const stateSelect = document.getElementById('stateSelect');
   const industrySelect = document.getElementById('industrySelect');
+  const primarySourceSelect = document.getElementById('primarySourceSelect');
+  const fallbackSourceSelect = document.getElementById('fallbackSourceSelect');
+  const verificationMethodSelect = document.getElementById('verificationMethodSelect');
   const websiteFilterSelect = document.getElementById('websiteFilterSelect');
-  const includeWebsitesCheck = document.getElementById('includeWebsitesCheck');
   const includePhonesCheck = document.getElementById('includePhonesCheck');
   const excludeChainsCheck = document.getElementById('excludeChainsCheck');
   const quotaBtns = document.querySelectorAll('.quota-btn');
   const selectedQuotaInput = document.getElementById('selectedQuotaInput');
 
-  // Control Buttons
+  // Action Buttons
   const startBtn = document.getElementById('startScraperBtn');
   const pauseBtn = document.getElementById('pauseScraperBtn');
   const stopBtn = document.getElementById('stopScraperBtn');
@@ -28,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const clearBtn = document.getElementById('clearLeadsBtn');
   const downloadCountBadge = document.getElementById('downloadCountBadge');
 
-  // Google Sheets UI Elements
+  // Modals & Feedback
   const sheetsModal = document.getElementById('sheetsModal');
   const closeSheetsModalBtn = document.getElementById('closeSheetsModalBtn');
   const sheetsWebhookUrlInput = document.getElementById('sheetsWebhookUrlInput');
@@ -38,7 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const appsScriptPreview = document.getElementById('appsScriptPreview');
   const sheetsFeedbackMsg = document.getElementById('sheetsFeedbackMsg');
 
-  // Supabase UI Elements
   const cloudConfigOpenBtn = document.getElementById('cloudConfigOpenBtn');
   const cloudStatusDot = document.getElementById('cloudStatusDot');
   const cloudStatusText = document.getElementById('cloudStatusText');
@@ -52,23 +53,33 @@ document.addEventListener('DOMContentLoaded', () => {
   const sqlSchemaPreview = document.getElementById('sqlSchemaPreview');
   const supabaseFeedbackMsg = document.getElementById('supabaseFeedbackMsg');
 
-  // System Status & Telemetry
+  // Metrics & Telemetry
   const systemPulse = document.getElementById('systemPulse');
   const systemStatusText = document.getElementById('systemStatusText');
   const metricTotalLeads = document.getElementById('metricTotalLeads');
-  const metricVerifiedPhones = document.getElementById('metricVerifiedPhones');
+  const metricConfirmedNoWebsite = document.getElementById('metricConfirmedNoWebsite');
+  const metricSocialOnly = document.getElementById('metricSocialOnly');
   const metricWebsites = document.getElementById('metricWebsites');
-  const metricWebsitesIcon = document.getElementById('metricWebsitesIcon');
-  const metricWebsitesLabel = document.getElementById('metricWebsitesLabel');
-  const metricVelocity = document.getElementById('metricVelocity');
+  const metricUncertain = document.getElementById('metricUncertain');
 
-  // Progress Bar & Log
+  // Progress & Terminal
   const progressStatusLabel = document.getElementById('progressStatusLabel');
   const progressPercentageText = document.getElementById('progressPercentageText');
   const progressBarFill = document.getElementById('progressBarFill');
   const terminalLog = document.getElementById('terminalLog');
 
-  // Table & Pagination
+  // Tabs & Table
+  const tabAll = document.getElementById('tabAll');
+  const tabNoWebsite = document.getElementById('tabNoWebsite');
+  const tabNoWebsiteSocialOnly = document.getElementById('tabNoWebsiteSocialOnly');
+  const tabWithWebsite = document.getElementById('tabWithWebsite');
+  const tabUncertain = document.getElementById('tabUncertain');
+  const tabCountAll = document.getElementById('tabCountAll');
+  const tabCountNoWebsite = document.getElementById('tabCountNoWebsite');
+  const tabCountNoWebsiteSocialOnly = document.getElementById('tabCountNoWebsiteSocialOnly');
+  const tabCountWithWebsite = document.getElementById('tabCountWithWebsite');
+  const tabCountUncertain = document.getElementById('tabCountUncertain');
+
   const tableHeading = document.getElementById('tableLeadCount');
   const leadsTableBody = document.getElementById('leadsTableBody');
   const tableSearchInput = document.getElementById('tableSearchInput');
@@ -77,27 +88,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const prevPageBtn = document.getElementById('prevPageBtn');
   const nextPageBtn = document.getElementById('nextPageBtn');
 
-  const thPhone = document.getElementById('thPhone');
-  const thWebsite = document.getElementById('thWebsite');
-  const thStatus = document.getElementById('thStatus');
-  const thSource = document.getElementById('thSource');
-
-  function isGoogleMapsUrl(url) {
-    if (!url || typeof url !== 'string') return false;
-    return /google\.[a-z.]+\/maps|maps\.google\.|goo\.gl\/maps/i.test(url);
-  }
-
   // State Management
   let allLeads = [];
-  let filteredLeads = [];
-  let activeSession = null;
+  let currentTab = 'all';
   let currentPage = 1;
   const PAGE_SIZE = 25;
+  let activeEventSource = null;
   let isPaused = false;
-  let pendingRender = false;
 
-  // 1. Initialize State Select Options Based on Selected Country
+  // 1. Populate States for Country
   function populateStatesForCountry(countryName) {
+    if (typeof ScraperEngine === 'undefined') return;
     const states = ScraperEngine.getStatesForCountry(countryName);
     stateSelect.innerHTML = '';
     states.forEach(state => {
@@ -108,456 +109,175 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Country Change Event
+  // 2. Load Providers dynamically from backend
+  async function loadProvidersForCountry(countryName) {
+    try {
+      const res = await fetch(`/api/providers?country=${encodeURIComponent(countryName)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const providers = data.providers || [];
+
+      // Group providers
+      const groups = {};
+      providers.forEach(p => {
+        const grp = p.group || 'Other';
+        if (!groups[grp]) groups[grp] = [];
+        groups[grp].push(p);
+      });
+
+      primarySourceSelect.innerHTML = '';
+      fallbackSourceSelect.innerHTML = '<option value="">None (Primary Only)</option>';
+
+      for (const [groupName, list] of Object.entries(groups)) {
+        const optgroupPrimary = document.createElement('optgroup');
+        optgroupPrimary.label = groupName;
+
+        const optgroupFallback = document.createElement('optgroup');
+        optgroupFallback.label = groupName;
+
+        list.forEach(p => {
+          const optP = document.createElement('option');
+          optP.value = p.id;
+          optP.textContent = p.label;
+          if (p.needsFreeKey && !p.configured) {
+            optP.disabled = true;
+          }
+          optgroupPrimary.appendChild(optP);
+
+          if (p.id !== 'auto') {
+            const optF = document.createElement('option');
+            optF.value = p.id;
+            optF.textContent = p.label;
+            if (p.needsFreeKey && !p.configured) {
+              optF.disabled = true;
+            }
+            optgroupFallback.appendChild(optF);
+          }
+        });
+
+        primarySourceSelect.appendChild(optgroupPrimary);
+        if (optgroupFallback.children.length > 0) {
+          fallbackSourceSelect.appendChild(optgroupFallback);
+        }
+      }
+
+      // Default to auto
+      primarySourceSelect.value = 'auto';
+    } catch (err) {
+      console.warn('Failed to load providers from backend:', err);
+    }
+  }
+
+  // 3. Update Search Telemetry Status
+  async function updateSearchTelemetry() {
+    try {
+      const res = await fetch('/api/search-status');
+      if (res.ok) {
+        const status = await res.json();
+        const backendName = status.activeBackend === 'searxng' ? 'SearXNG (Docker)' : 'DuckDuckGo HTML';
+        const blockRate = (status && typeof status.blockRatePercent === 'number') ? status.blockRatePercent : 0;
+        systemStatusText.textContent = `Ready | Search: ${backendName} (${blockRate}% block rate)`;
+      }
+    } catch (e) {}
+  }
+
+  // Initialize dropdowns & telemetry
+  populateStatesForCountry(countrySelect.value);
+  loadProvidersForCountry(countrySelect.value);
+  updateSearchTelemetry();
+
   countrySelect.addEventListener('change', () => {
     populateStatesForCountry(countrySelect.value);
-    appendLog(`🌍 Selected country: ${countrySelect.value}. Available states updated.`);
+    loadProvidersForCountry(countrySelect.value);
+    appendLog(`🌍 Selected country: ${countrySelect.value}. Available sources updated.`);
   });
 
-  // Initial populate for default country
-  populateStatesForCountry(countrySelect.value);
-
-  // 2. Separate Contact Checkbox Validation
-  function validateContactCheckboxes(changedElement) {
-    if (!includeWebsitesCheck.checked && !includePhonesCheck.checked) {
-      if (changedElement) changedElement.checked = true;
-      else includeWebsitesCheck.checked = true;
-      alert('Please select at least one contact channel (Websites or Phone Numbers).');
-    }
-    updateTableHeadersVisibility();
-  }
-
-  includeWebsitesCheck.addEventListener('change', () => validateContactCheckboxes(includeWebsitesCheck));
-  includePhonesCheck.addEventListener('change', () => validateContactCheckboxes(includePhonesCheck));
-
-  function updateTableHeadersVisibility() {
-    const showWeb = includeWebsitesCheck.checked;
-    const showPhone = includePhonesCheck.checked;
-    if (thWebsite) thWebsite.style.display = showWeb ? '' : 'none';
-    if (thStatus) thStatus.style.display = showWeb ? '' : 'none';
-    if (thPhone) thPhone.style.display = showPhone ? '' : 'none';
-  }
-
-  // 3. Quota Selection Handling (Supports 1k, 5k, 10k, 30k, 70k, 100k)
+  // Quota buttons
   quotaBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       quotaBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       selectedQuotaInput.value = btn.dataset.quota;
-      appendLog(`🎯 Lead quota set to ${parseInt(btn.dataset.quota, 10).toLocaleString()} leads.`);
     });
   });
 
-  // 4. Terminal Log Helper
-  function appendLog(message, type = 'normal') {
+  // Tabs switching
+  const tabBtns = [tabAll, tabNoWebsite, tabNoWebsiteSocialOnly, tabWithWebsite, tabUncertain].filter(Boolean);
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentTab = btn.dataset.tab;
+      currentPage = 1;
+      renderActivePage();
+    });
+  });
+
+  // Logging helper
+  function appendLog(msg, type = 'info') {
     const line = document.createElement('div');
     line.className = `terminal-line ${type}`;
     const time = new Date().toLocaleTimeString();
-    line.textContent = `[${time}] ${message}`;
+    line.textContent = `[${time}] ${msg}`;
     terminalLog.appendChild(line);
     terminalLog.scrollTop = terminalLog.scrollHeight;
   }
 
-  // 5. Start Scraper
-  startBtn.addEventListener('click', () => {
-    validateContactCheckboxes();
+  // Metrics helper
+  function updateMetrics(total, noWeb, hasWeb, uncertain, socialOnly = 0) {
+    if (metricTotalLeads) metricTotalLeads.textContent = total.toLocaleString();
+    if (metricConfirmedNoWebsite) metricConfirmedNoWebsite.textContent = noWeb.toLocaleString();
+    if (metricSocialOnly) metricSocialOnly.textContent = socialOnly.toLocaleString();
+    if (metricWebsites) metricWebsites.textContent = hasWeb.toLocaleString();
+    if (metricUncertain) metricUncertain.textContent = uncertain.toLocaleString();
 
-    const country = countrySelect.value;
-    const stateCode = stateSelect.value;
-    const industry = industrySelect.value;
-    const websiteFilter = websiteFilterSelect ? websiteFilterSelect.value : 'with_website';
-    const quota = Math.min(100000, parseInt(selectedQuotaInput.value, 10) || 1000);
-    const includeWebsites = includeWebsitesCheck.checked;
-    const includePhones = includePhonesCheck.checked;
-    const excludeChains = excludeChainsCheck ? excludeChainsCheck.checked : true;
-
-    if (activeSession && !activeSession.isStopped) {
-      activeSession.stop();
-    }
-
-    allLeads = [];
-    filteredLeads = [];
-    currentPage = 1;
-    updateTableHeadersVisibility();
-    updateTable();
-    updateMetrics(0, 0, 0, 0);
-
-    // UI Status
-    systemPulse.className = 'pulse-dot running';
-    systemStatusText.textContent = 'Mining Leads...';
-    startBtn.disabled = true;
-    pauseBtn.disabled = false;
-    stopBtn.disabled = false;
-    downloadBtn.disabled = true;
-    if (syncGoogleSheetsBtn) syncGoogleSheetsBtn.disabled = true;
-    syncSupabaseBtn.disabled = true;
-    countrySelect.disabled = true;
-    stateSelect.disabled = true;
-    industrySelect.disabled = true;
-    if (websiteFilterSelect) websiteFilterSelect.disabled = true;
-    includeWebsitesCheck.disabled = true;
-    includePhonesCheck.disabled = true;
-    if (excludeChainsCheck) excludeChainsCheck.disabled = true;
-    quotaBtns.forEach(b => b.disabled = true);
-
-    progressBarFill.style.width = '0%';
-    progressPercentageText.textContent = '0%';
-    progressStatusLabel.textContent = `Extracting ${quota.toLocaleString()} ${industry} leads in ${country}...`;
-
-    let totalValidWebsitesCount = 0;
-
-    // Initialize Session
-    activeSession = new ScraperEngine.Session({
-      country: country,
-      stateCode: stateCode,
-      industry: industry,
-      websiteFilter: websiteFilter,
-      leadCount: quota,
-      includeWebsites: includeWebsites,
-      includePhones: includePhones,
-      excludeChains: excludeChains,
-      onProgress: (stats) => {
-        progressBarFill.style.width = `${stats.percentage}%`;
-        progressPercentageText.textContent = `${stats.percentage.toFixed(1)}%`;
-
-        const verifiedPhonesCount = includePhones ? stats.current : 0;
-        let websitesCount = 0;
-        if (websiteFilter === 'no_website') {
-          websitesCount = stats.current;
-        } else {
-          websitesCount = totalValidWebsitesCount;
-        }
-
-        updateMetrics(stats.current, verifiedPhonesCount, websitesCount, stats.velocity);
-
-        if (!pendingRender) {
-          pendingRender = true;
-          requestAnimationFrame(() => {
-            renderActivePage();
-            pendingRender = false;
-          });
-        }
-      },
-      onChunk: (chunk) => {
-        if (!chunk || chunk.length === 0) return;
-        for (let i = 0; i < chunk.length; i++) {
-          const l = chunk[i];
-          if (l.hasWebsite && l.website && !isGoogleMapsUrl(l.website)) {
-            totalValidWebsitesCount++;
-          }
-          allLeads.push(l);
-        }
-        if (tableSearchInput && tableSearchInput.value.trim()) {
-          applySearchFilter();
-        } else {
-          filteredLeads = allLeads;
-          tableHeading.textContent = filteredLeads.length.toLocaleString();
-        }
-      },
-      onLog: (msg, type) => {
-        appendLog(msg, type);
-      },
-      onComplete: (leads) => {
-        const finalValidWebsites = allLeads.filter(l => l.hasWebsite && l.website && !isGoogleMapsUrl(l.website)).length;
-        updateMetrics(leads.length, includePhones ? leads.length : 0, websiteFilter === 'no_website' ? leads.length : finalValidWebsites, 0);
-        systemPulse.className = 'pulse-dot';
-        systemStatusText.textContent = 'Extraction Complete';
-        startBtn.disabled = false;
-        pauseBtn.disabled = true;
-        stopBtn.disabled = true;
-        downloadBtn.disabled = false;
-        if (syncGoogleSheetsBtn) syncGoogleSheetsBtn.disabled = false;
-        syncSupabaseBtn.disabled = false;
-        countrySelect.disabled = false;
-        stateSelect.disabled = false;
-        industrySelect.disabled = false;
-        if (websiteFilterSelect) websiteFilterSelect.disabled = false;
-        includeWebsitesCheck.disabled = false;
-        includePhonesCheck.disabled = false;
-        if (excludeChainsCheck) excludeChainsCheck.disabled = false;
-        quotaBtns.forEach(b => b.disabled = false);
-
-        progressBarFill.style.width = '100%';
-        progressPercentageText.textContent = '100%';
-        progressStatusLabel.textContent = `Successfully gathered ${leads.length.toLocaleString()} verified leads.`;
-
-        downloadCountBadge.textContent = leads.length.toLocaleString();
-        appendLog(`✨ Dataset ready for export & cloud sync (${leads.length.toLocaleString()} leads).`, 'success');
-        renderActivePage();
-      }
-    });
-
-    activeSession.start();
-  });
-
-  // 6. Pause / Resume
-  pauseBtn.addEventListener('click', () => {
-    if (!activeSession) return;
-    if (!isPaused) {
-      activeSession.pause();
-      isPaused = true;
-      pauseBtn.innerHTML = '<span>▶️</span> Resume';
-      systemPulse.className = 'pulse-dot paused';
-      systemStatusText.textContent = 'Scraper Paused';
-    } else {
-      activeSession.resume();
-      isPaused = false;
-      pauseBtn.innerHTML = '<span>⏸️</span> Pause';
-      systemPulse.className = 'pulse-dot running';
-      systemStatusText.textContent = 'Mining Leads...';
-    }
-  });
-
-  // 7. Stop Scraper
-  stopBtn.addEventListener('click', () => {
-    if (!activeSession) return;
-    activeSession.stop();
-    isPaused = false;
-    pauseBtn.innerHTML = '<span>⏸️</span> Pause';
-    startBtn.disabled = false;
-    pauseBtn.disabled = true;
-    stopBtn.disabled = true;
-    countrySelect.disabled = false;
-    stateSelect.disabled = false;
-    industrySelect.disabled = false;
-    if (websiteFilterSelect) websiteFilterSelect.disabled = false;
-    includeWebsitesCheck.disabled = false;
-    includePhonesCheck.disabled = false;
-    if (excludeChainsCheck) excludeChainsCheck.disabled = false;
-    quotaBtns.forEach(b => b.disabled = false);
-
-    systemPulse.className = 'pulse-dot';
-    systemStatusText.textContent = 'Scraping Stopped';
-    if (allLeads.length > 0) {
-      downloadBtn.disabled = false;
-      if (syncGoogleSheetsBtn) syncGoogleSheetsBtn.disabled = false;
-      syncSupabaseBtn.disabled = false;
-      downloadCountBadge.textContent = allLeads.length.toLocaleString();
-    }
-  });
-
-  // 8. Clear All Leads
-  clearBtn.addEventListener('click', () => {
-    if (activeSession && !activeSession.isStopped) {
-      activeSession.stop();
-    }
-    allLeads = [];
-    filteredLeads = [];
-    currentPage = 1;
-    updateMetrics(0, 0, 0, 0);
-    progressBarFill.style.width = '0%';
-    progressPercentageText.textContent = '0%';
-    progressStatusLabel.textContent = 'Extraction Progress';
-    downloadBtn.disabled = true;
-    if (syncGoogleSheetsBtn) syncGoogleSheetsBtn.disabled = true;
-    syncSupabaseBtn.disabled = true;
-    downloadCountBadge.textContent = '0';
-    startBtn.disabled = false;
-    pauseBtn.disabled = true;
-    stopBtn.disabled = true;
-    countrySelect.disabled = false;
-    stateSelect.disabled = false;
-    industrySelect.disabled = false;
-    if (websiteFilterSelect) websiteFilterSelect.disabled = false;
-    includeWebsitesCheck.disabled = false;
-    includePhonesCheck.disabled = false;
-    if (excludeChainsCheck) excludeChainsCheck.disabled = false;
-    quotaBtns.forEach(b => b.disabled = false);
-    systemPulse.className = 'pulse-dot';
-    systemStatusText.textContent = 'Engine Ready';
-
-    leadsTableBody.innerHTML = `
-      <tr>
-        <td colspan="11">
-          <div class="empty-state">
-            <div class="empty-icon">📁</div>
-            <p>No leads extracted yet. Configure your criteria above and click <strong>Start Scraper</strong> to extract up to 100,000 leads.</p>
-          </div>
-        </td>
-      </tr>
-    `;
-    paginationBar.style.display = 'none';
-    tableHeading.textContent = '0';
-    appendLog(`🧹 Cleared all lead records from dashboard.`);
-  });
-
-  // 9. Download CSV
-  downloadBtn.addEventListener('click', () => {
-    if (allLeads.length === 0) return;
-
-    appendLog(`📦 Preparing high-performance CSV stream for ${allLeads.length.toLocaleString()} leads...`);
-
-    const result = CsvExporter.exportLeadsToCsv(allLeads, {
-      country: countrySelect.value,
-      state: stateSelect.value,
-      industry: industrySelect.value,
-      websiteFilter: websiteFilterSelect ? websiteFilterSelect.value : 'with_website',
-      includeWebsites: includeWebsitesCheck.checked,
-      includePhones: includePhonesCheck.checked
-    });
-
-    if (result && result.success) {
-      appendLog(`✅ Download ready: ${result.filename} (${result.count.toLocaleString()} leads)`, 'success');
-    }
-  });
-
-  // 10. Sync Leads to Supabase Database
-  syncSupabaseBtn.addEventListener('click', async () => {
-    if (allLeads.length === 0) return;
-
-    const config = SupabaseManager.getSavedConfig();
-    if (!config.url || !config.key) {
-      openModal();
-      setFeedback('Please enter your Supabase Project URL and Anon API Key to enable sync.', 'error');
-      return;
-    }
-
-    syncSupabaseBtn.disabled = true;
-    syncSupabaseBtn.innerHTML = '<span>⏳</span> Syncing...';
-    appendLog(`☁️ Initiating cloud synchronization of ${allLeads.length.toLocaleString()} leads to Supabase...`);
-
-    try {
-      const res = await SupabaseManager.syncLeadsToSupabase(allLeads, {
-        onProgress: (p) => {
-          syncSupabaseBtn.innerHTML = `<span>⏳</span> Syncing (${p.percentage}%)`;
-          if (p.synced % 2500 === 0 || p.synced === allLeads.length) {
-            appendLog(`☁️ Synced ${p.synced.toLocaleString()} of ${p.total.toLocaleString()} leads to Supabase (${p.percentage}%)`);
-          }
-        }
-      });
-
-      appendLog(`🎉 Successfully synchronized ${res.syncedCount.toLocaleString()} leads into Supabase 'leads' table!`, 'success');
-      alert(`Success! ${res.syncedCount.toLocaleString()} leads have been saved to your Supabase database.`);
-    } catch (err) {
-      appendLog(`❌ Supabase Sync Failed: ${err.message}`, 'warning');
-      alert(`Supabase Sync Error: ${err.message}`);
-    } finally {
-      syncSupabaseBtn.disabled = false;
-      syncSupabaseBtn.innerHTML = '<span>☁️</span> Sync to Supabase';
-    }
-  });
-
-  // 10-B. Sync Leads Directly to Google Sheets
-  if (syncGoogleSheetsBtn) {
-    syncGoogleSheetsBtn.addEventListener('click', async () => {
-      if (allLeads.length === 0) return;
-
-      const webhookUrl = GoogleSheetsManager.getSavedWebhookUrl();
-      if (!webhookUrl) {
-        openSheetsModal();
-        setSheetsFeedback('Please configure your Google Apps Script Webhook URL to enable direct Google Sheets sync.', 'error');
-        return;
-      }
-
-      syncGoogleSheetsBtn.disabled = true;
-      syncGoogleSheetsBtn.innerHTML = '<span>⏳</span> Syncing to Sheets...';
-      appendLog(`📊 Initiating direct Google Sheets synchronization for ${allLeads.length.toLocaleString()} leads...`);
-
-      try {
-        const res = await GoogleSheetsManager.syncLeadsToGoogleSheets(allLeads, {
-          onProgress: (p) => {
-            syncGoogleSheetsBtn.innerHTML = `<span>⏳</span> Syncing (${p.percentage}%)`;
-            if (p.synced % 1500 === 0 || p.synced === allLeads.length) {
-              appendLog(`📊 Exported ${p.synced.toLocaleString()} of ${p.total.toLocaleString()} leads to Google Sheets (${p.percentage}%)`);
-            }
-          }
-        });
-
-        appendLog(`🎉 Successfully synchronized ${res.syncedCount.toLocaleString()} leads directly into your Google Sheet!`, 'success');
-        alert(`Success! ${res.syncedCount.toLocaleString()} leads have been synchronized directly to your Google Sheet.`);
-      } catch (err) {
-        appendLog(`❌ Google Sheets Sync Failed: ${err.message}`, 'warning');
-        alert(`Google Sheets Sync Error: ${err.message}\n\nPlease verify your Google Apps Script Web App is deployed as 'Anyone' and that the Webhook URL is correct.`);
-      } finally {
-        syncGoogleSheetsBtn.disabled = false;
-        syncGoogleSheetsBtn.innerHTML = '<span>📊</span> Sync to Sheets';
-      }
-    });
+    if (tabCountAll) tabCountAll.textContent = total.toLocaleString();
+    if (tabCountNoWebsite) tabCountNoWebsite.textContent = noWeb.toLocaleString();
+    if (tabCountNoWebsiteSocialOnly) tabCountNoWebsiteSocialOnly.textContent = socialOnly.toLocaleString();
+    if (tabCountWithWebsite) tabCountWithWebsite.textContent = hasWeb.toLocaleString();
+    if (tabCountUncertain) tabCountUncertain.textContent = uncertain.toLocaleString();
   }
 
-  // 11. Search Filtering
-  tableSearchInput.addEventListener('input', () => {
-    currentPage = 1;
-    applySearchFilter();
-    renderActivePage();
-  });
+  // Filter leads according to active tab and search query
+  function getFilteredLeads() {
+    let list = allLeads;
 
-  function applySearchFilter() {
+    if (currentTab === 'no_website') {
+      list = list.filter(l => l.websiteCheckStatus === 'Confirmed no website');
+    } else if (currentTab === 'no_website_social_only') {
+      list = list.filter(l => l.websiteCheckStatus === 'No website found (social only, bio unread)');
+    } else if (currentTab === 'with_website') {
+      list = list.filter(l => l.websiteCheckStatus === 'Has website');
+    } else if (currentTab === 'uncertain') {
+      list = list.filter(l => l.websiteCheckStatus === 'Uncertain');
+    }
+
     const query = tableSearchInput.value.trim().toLowerCase();
-    if (!query) {
-      filteredLeads = allLeads;
-    } else {
-      filteredLeads = allLeads.filter(lead => {
-        return (
-          lead.businessName.toLowerCase().includes(query) ||
-          lead.ownerName.toLowerCase().includes(query) ||
-          lead.state.toLowerCase().includes(query) ||
-          lead.city.toLowerCase().includes(query) ||
-          (lead.phone && lead.phone.toLowerCase().includes(query)) ||
-          (lead.website && lead.website.toLowerCase().includes(query)) ||
-          (lead.websiteStatus && lead.websiteStatus.toLowerCase().includes(query)) ||
-          (lead.source && lead.source.toLowerCase().includes(query))
-        );
-      });
-    }
-    tableHeading.textContent = filteredLeads.length.toLocaleString();
-  }
+    if (!query) return list;
 
-  // 12. Update Telemetry Cards
-  function updateMetrics(total, phones, websites, velocity) {
-    metricTotalLeads.textContent = total.toLocaleString();
-    metricVerifiedPhones.textContent = phones.toLocaleString();
-
-    const filter = websiteFilterSelect ? websiteFilterSelect.value : 'with_website';
-    if (filter === 'no_website') {
-      if (metricWebsitesLabel) metricWebsitesLabel.textContent = 'No-Website Leads';
-      if (metricWebsitesIcon) metricWebsitesIcon.textContent = '📵';
-      metricWebsites.textContent = total.toLocaleString();
-    } else if (filter === 'all') {
-      if (metricWebsitesLabel) metricWebsitesLabel.textContent = 'Live Websites';
-      if (metricWebsitesIcon) metricWebsitesIcon.textContent = '🌐';
-      metricWebsites.textContent = websites.toLocaleString();
-    } else {
-      if (metricWebsitesLabel) metricWebsitesLabel.textContent = 'Working Websites';
-      if (metricWebsitesIcon) metricWebsitesIcon.textContent = '🌐';
-      metricWebsites.textContent = websites.toLocaleString();
-    }
-
-    metricVelocity.textContent = `${velocity.toLocaleString()} /s`;
-  }
-
-  // 13. Website Filter Change Listener
-  if (websiteFilterSelect) {
-    websiteFilterSelect.addEventListener('change', () => {
-      const filter = websiteFilterSelect.value;
-      if (filter === 'no_website') {
-        if (metricWebsitesLabel) metricWebsitesLabel.textContent = 'No-Website Leads';
-        if (metricWebsitesIcon) metricWebsitesIcon.textContent = '📵';
-        appendLog('📵 Target mode changed: Filter for confirmed NO-website leads (Agency Outreach).');
-      } else if (filter === 'with_website') {
-        if (metricWebsitesLabel) metricWebsitesLabel.textContent = 'Working Websites';
-        if (metricWebsitesIcon) metricWebsitesIcon.textContent = '🌐';
-        appendLog('🌐 Target mode changed: Filter for 100% live verified working websites.');
-      } else {
-        if (metricWebsitesLabel) metricWebsitesLabel.textContent = 'Live Websites';
-        if (metricWebsitesIcon) metricWebsitesIcon.textContent = '🌐';
-        appendLog('⚡ Target mode changed: Filter for both live websites & offline leads.');
-      }
+    return list.filter(l => {
+      return (
+        (l.businessName && l.businessName.toLowerCase().includes(query)) ||
+        (l.city && l.city.toLowerCase().includes(query)) ||
+        (l.phone && l.phone.toLowerCase().includes(query)) ||
+        (l.websiteEvidence && l.websiteEvidence.toLowerCase().includes(query)) ||
+        (l.sourceProvider && l.sourceProvider.toLowerCase().includes(query))
+      );
     });
   }
 
-  // 14. Table Rendering with Pagination & Dynamic Columns
+  // Render active page
   function renderActivePage() {
-    const showWeb = includeWebsitesCheck.checked;
-    const showPhone = includePhonesCheck.checked;
+    const list = getFilteredLeads();
+    tableHeading.textContent = list.length.toLocaleString();
 
-    if (filteredLeads.length === 0) {
+    if (list.length === 0) {
       leadsTableBody.innerHTML = `
         <tr>
-          <td colspan="11">
+          <td colspan="10">
             <div class="empty-state">
-              <div class="empty-icon">🔍</div>
-              <p>No matching leads found for "${escapeHtml(tableSearchInput.value)}".</p>
+              <div class="empty-icon">📁</div>
+              <p>No leads found matching current filter.</p>
             </div>
           </td>
         </tr>
@@ -566,77 +286,86 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    paginationBar.style.display = 'flex';
-    const totalPages = Math.ceil(filteredLeads.length / PAGE_SIZE);
+    const totalPages = Math.ceil(list.length / PAGE_SIZE) || 1;
     if (currentPage > totalPages) currentPage = totalPages;
-    if (currentPage < 1) currentPage = 1;
 
     const startIdx = (currentPage - 1) * PAGE_SIZE;
-    const endIdx = Math.min(startIdx + PAGE_SIZE, filteredLeads.length);
-    const pageItems = filteredLeads.slice(startIdx, endIdx);
+    const pageItems = list.slice(startIdx, startIdx + PAGE_SIZE);
 
-    paginationInfo.textContent = `Showing ${(startIdx + 1).toLocaleString()} to ${endIdx.toLocaleString()} of ${filteredLeads.length.toLocaleString()} leads (Page ${currentPage} of ${totalPages})`;
+    leadsTableBody.innerHTML = '';
+    pageItems.forEach((lead, i) => {
+      const row = document.createElement('tr');
+      const idx = startIdx + i + 1;
 
-    prevPageBtn.disabled = (currentPage <= 1);
-    nextPageBtn.disabled = (currentPage >= totalPages);
-
-    let html = '';
-    for (let i = 0; i < pageItems.length; i++) {
-      const lead = pageItems[i];
-
-      const phoneCell = showPhone
-        ? `<td><span class="phone-cell">${escapeHtml(lead.phone || 'N/A')}</span></td>`
-        : '';
-
-      let websiteCell = '';
-      let statusCell = '';
-
-      if (showWeb) {
-        if (!lead.website || lead.websiteStatus === 'No Website Detected' || isGoogleMapsUrl(lead.website)) {
-          websiteCell = `<td><span class="badge-no-website">📵 None (Offline Lead)</span></td>`;
-          statusCell = `<td><span class="badge badge-status-nowebsite">📵 No Website Detected</span></td>`;
-        } else {
-          const websiteUrl = lead.website;
-          const websiteDisplay = websiteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
-          websiteCell = `<td><a href="${escapeHtml(websiteUrl)}" target="_blank" rel="noopener noreferrer" class="link-website">${escapeHtml(websiteDisplay)} ↗</a></td>`;
-          statusCell = `<td><span class="badge badge-status-online">🟢 ${escapeHtml(lead.websiteStatus || '200 OK (Live)')}</span></td>`;
-        }
+      // Status pill class & label
+      let statusClass = 'status-pill live';
+      let statusText = 'Has website';
+      if (lead.websiteCheckStatus === 'Confirmed no website') {
+        statusClass = 'status-pill offline';
+        statusText = 'Confirmed No Website';
+      } else if (lead.websiteCheckStatus === 'No website found (social only, bio unread)') {
+        statusClass = 'status-pill social-only';
+        statusText = 'Social Only (Bio Unread)';
+      } else if (lead.websiteCheckStatus === 'Uncertain') {
+        statusClass = 'status-pill uncertain';
+        statusText = 'Uncertain (Review)';
       }
 
-      const sourceName = lead.source || 'Google Maps';
-      const cleanQuery = `${lead.businessName || ''} ${lead.city || ''} ${lead.state || ''}`.trim();
-      const sourceUrl = lead.sourceUrl || (lead.website && isGoogleMapsUrl(lead.website) ? lead.website : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanQuery)}`);
-      const sourceCell = `<td><a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer" class="link-source" title="Open ${escapeHtml(sourceName)} Directory Listing">📍 ${escapeHtml(sourceName)} ↗</a></td>`;
+      // Confidence badge
+      const conf = (lead.confidence || 'medium').toLowerCase();
+      const confClass = conf === 'high' ? 'badge-confidence-high' : (conf === 'low' ? 'badge-confidence-low' : 'badge-confidence-medium');
+      const confBadge = `<span class="${confClass}">${conf}</span>`;
 
-      html += `
-        <tr>
-          <td style="color: var(--text-muted); font-size: 12px;">#${lead.id}</td>
-          <td>${lead.countryFlag || '🌍'} ${escapeHtml(lead.country)}</td>
-          <td><span style="font-weight: 500; color: #cbd5e1;">${escapeHtml(lead.state)}</span> <span style="font-size: 11px; color: var(--text-muted);">(${escapeHtml(lead.city)})</span></td>
-          <td style="font-weight: 600;">
-            ${escapeHtml(lead.businessName)}
-            ${lead.isChain ? '<span class="badge badge-chain" title="Multi-location brand (> 2 locations)">🏢 Multi-Location</span>' : (lead.isMultiCountry ? '<span class="badge badge-multi-country" title="Multi-country brand">🌐 Multi-Country</span>' : '<span class="badge badge-single-loc" title="Verified Independent Local Business (≤ 2 Locations)">📍 Local (≤2 Loc)</span>')}
-          </td>
-          <td class="owner-cell">${escapeHtml(lead.ownerName)}</td>
-          ${phoneCell}
-          ${websiteCell}
-          ${statusCell}
-          ${sourceCell}
-          <td><span class="badge badge-industry">${escapeHtml(lead.industry)}</span></td>
-          <td><span class="badge badge-verified">✓ Verified</span></td>
-        </tr>
+      // Website URL link
+      const webCell = lead.website && lead.website.startsWith('http')
+        ? `<a href="${lead.website}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8; text-decoration:underline;">${lead.website}</a>`
+        : `<span style="color:var(--text-muted);">—</span>`;
+
+      // Social profile link
+      const socialCell = lead.socialProfile && lead.socialProfile.startsWith('http')
+        ? `<a href="${lead.socialProfile}" target="_blank" rel="noopener noreferrer" style="color:#a855f7; text-decoration:underline;">Social Link</a>`
+        : `<span style="color:var(--text-muted);">—</span>`;
+
+      // Source URL badge
+      const sourceBadge = lead.sourceUrl
+        ? `<a href="${lead.sourceUrl}" target="_blank" rel="noopener noreferrer" class="source-badge"><span>🔗</span> ${lead.sourceProvider || 'Source'}</a>`
+        : `<span class="source-badge">${lead.sourceProvider || 'Source'}</span>`;
+
+      row.innerHTML = `
+        <td>${idx}</td>
+        <td><strong>${escapeHtml(lead.businessName || lead.name)}</strong></td>
+        <td>${escapeHtml(lead.city || '')}${lead.state ? ', ' + escapeHtml(lead.state) : ''}</td>
+        <td>${lead.phone ? `<code>${escapeHtml(lead.phone)}</code>` : '<span style="color:var(--text-muted);">—</span>'}</td>
+        <td><span class="${statusClass}">${statusText}</span></td>
+        <td>${confBadge}</td>
+        <td>${webCell}</td>
+        <td class="evidence-cell">${escapeHtml(lead.websiteEvidence || 'Direct source tag')}</td>
+        <td>${sourceBadge}</td>
+        <td>${socialCell}</td>
       `;
-    }
+      leadsTableBody.appendChild(row);
+    });
 
-    leadsTableBody.innerHTML = html;
+    paginationBar.style.display = totalPages > 1 ? 'flex' : 'none';
+    paginationInfo.textContent = `Showing ${startIdx + 1} to ${Math.min(startIdx + PAGE_SIZE, list.length)} of ${list.length} leads`;
+    prevPageBtn.disabled = (currentPage === 1);
+    nextPageBtn.disabled = (currentPage === totalPages);
   }
 
-  function updateTable() {
-    applySearchFilter();
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  tableSearchInput.addEventListener('input', () => {
+    currentPage = 1;
     renderActivePage();
-  }
+  });
 
-  // Pagination navigation
   prevPageBtn.addEventListener('click', () => {
     if (currentPage > 1) {
       currentPage--;
@@ -645,193 +374,285 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   nextPageBtn.addEventListener('click', () => {
-    const totalPages = Math.ceil(filteredLeads.length / PAGE_SIZE);
-    if (currentPage < totalPages) {
-      currentPage++;
+    currentPage++;
+    renderActivePage();
+  });
+
+  // 4. Start Scraper Execution
+  startBtn.addEventListener('click', () => {
+    const country = countrySelect.value;
+    const stateCode = stateSelect.value;
+    const industry = industrySelect.value;
+    const primarySource = primarySourceSelect.value;
+    const fallbackSource = fallbackSourceSelect.value;
+    const verificationMethod = verificationMethodSelect.value;
+    const websiteFilter = websiteFilterSelect.value;
+    const includePhones = includePhonesCheck.checked;
+    const excludeChains = excludeChainsCheck.checked;
+    const quota = parseInt(selectedQuotaInput.value, 10) || 50;
+
+    // Reset UI
+    allLeads = [];
+    currentPage = 1;
+    updateMetrics(0, 0, 0, 0);
+    renderActivePage();
+
+    systemPulse.className = 'pulse-dot running';
+    systemStatusText.textContent = 'Mining Real Data...';
+    startBtn.disabled = true;
+    pauseBtn.disabled = true; // Stream cannot be paused mid-flight without disconnect
+    stopBtn.disabled = false;
+    downloadBtn.disabled = true;
+    syncGoogleSheetsBtn.disabled = true;
+    syncSupabaseBtn.disabled = true;
+
+    countrySelect.disabled = true;
+    stateSelect.disabled = true;
+    industrySelect.disabled = true;
+    primarySourceSelect.disabled = true;
+    fallbackSourceSelect.disabled = true;
+    verificationMethodSelect.disabled = true;
+    websiteFilterSelect.disabled = true;
+    includePhonesCheck.disabled = true;
+    excludeChainsCheck.disabled = true;
+    quotaBtns.forEach(b => b.disabled = true);
+
+    progressBarFill.style.width = '0%';
+    progressPercentageText.textContent = '0%';
+    progressStatusLabel.textContent = `Streaming ${industry} leads in ${country}...`;
+
+    const params = new URLSearchParams({
+      country,
+      state: stateCode,
+      industry,
+      quota,
+      primarySource,
+      fallbackSource,
+      verificationMethod,
+      websiteFilter,
+      includePhones,
+      excludeChains
+    });
+
+    const streamUrl = `/api/stream-scrape?${params.toString()}`;
+    activeEventSource = new EventSource(streamUrl);
+
+    activeEventSource.addEventListener('log', (e) => {
+      const data = JSON.parse(e.data);
+      appendLog(data.message);
+    });
+
+    activeEventSource.addEventListener('source_count', (e) => {
+      const data = JSON.parse(e.data);
+      appendLog(`📡 [${data.source}] Identified ${data.count} candidate businesses`, 'success');
+    });
+
+    activeEventSource.addEventListener('lead', (e) => {
+      const lead = JSON.parse(e.data);
+      allLeads.push(lead);
       renderActivePage();
+      downloadCountBadge.textContent = allLeads.length.toLocaleString();
+    });
+
+    activeEventSource.addEventListener('progress', (e) => {
+      const data = JSON.parse(e.data);
+      progressBarFill.style.width = `${data.percentage}%`;
+      progressPercentageText.textContent = `${data.percentage.toFixed(1)}%`;
+      updateMetrics(data.total, data.confirmedNoWebsite, data.hasWebsite, data.uncertain, data.noWebsiteSocialOnly || 0);
+    });
+
+    activeEventSource.addEventListener('complete', (e) => {
+      const data = JSON.parse(e.data);
+      appendLog(`🏁 Finished: ${data.totalFound} real businesses audited.`, 'success');
+      finishRun();
+    });
+
+    activeEventSource.addEventListener('error', (e) => {
+      appendLog('⚠️ SSE connection closed or interrupted.', 'warning');
+      finishRun();
+    });
+  });
+
+  function finishRun() {
+    if (activeEventSource) {
+      activeEventSource.close();
+      activeEventSource = null;
     }
-  });
 
-  // 14. Supabase Modal & Configuration Management
-  function openModal() {
-    const config = SupabaseManager.getSavedConfig();
-    supabaseUrlInput.value = config.url;
-    supabaseKeyInput.value = config.key;
-    sqlSchemaPreview.textContent = SupabaseManager.getSqlSchema();
-    supabaseFeedbackMsg.style.display = 'none';
-    supabaseModal.style.display = 'flex';
-  }
+    systemPulse.className = 'pulse-dot';
+    systemStatusText.textContent = 'Extraction Complete';
+    startBtn.disabled = false;
+    pauseBtn.disabled = true;
+    stopBtn.disabled = true;
 
-  function closeModal() {
-    supabaseModal.style.display = 'none';
-  }
+    countrySelect.disabled = false;
+    stateSelect.disabled = false;
+    industrySelect.disabled = false;
+    primarySourceSelect.disabled = false;
+    fallbackSourceSelect.disabled = false;
+    verificationMethodSelect.disabled = false;
+    websiteFilterSelect.disabled = false;
+    includePhonesCheck.disabled = false;
+    excludeChainsCheck.disabled = false;
+    quotaBtns.forEach(b => b.disabled = false);
 
-  cloudConfigOpenBtn.addEventListener('click', openModal);
-  openSupabaseModalBtn.addEventListener('click', openModal);
-  closeSupabaseModalBtn.addEventListener('click', closeModal);
-
-  supabaseModal.addEventListener('click', (e) => {
-    if (e.target === supabaseModal) closeModal();
-  });
-
-  function setFeedback(msg, type = 'success') {
-    supabaseFeedbackMsg.className = `feedback-msg ${type}`;
-    supabaseFeedbackMsg.textContent = msg;
-    supabaseFeedbackMsg.style.display = 'block';
-  }
-
-  // Test Supabase Connection
-  testSupabaseConnectionBtn.addEventListener('click', async () => {
-    const url = supabaseUrlInput.value.trim();
-    const key = supabaseKeyInput.value.trim();
-
-    testSupabaseConnectionBtn.disabled = true;
-    testSupabaseConnectionBtn.innerHTML = '<span>⏳</span> Testing...';
-
-    const res = await SupabaseManager.testConnection(url, key);
-    testSupabaseConnectionBtn.disabled = false;
-    testSupabaseConnectionBtn.innerHTML = '<span>🔌</span> Test Connection';
-
-    if (res.success) {
-      setFeedback(res.message, 'success');
-      updateCloudStatusPill(true);
-    } else {
-      setFeedback(res.message, 'error');
-      updateCloudStatusPill(false);
+    if (allLeads.length > 0) {
+      downloadBtn.disabled = false;
+      syncGoogleSheetsBtn.disabled = false;
+      syncSupabaseBtn.disabled = false;
+      downloadCountBadge.textContent = allLeads.length.toLocaleString();
     }
+  }
+
+  // Stop button
+  stopBtn.addEventListener('click', () => {
+    if (activeEventSource) {
+      activeEventSource.close();
+      activeEventSource = null;
+    }
+    appendLog('🛑 Stream stopped by user.');
+    finishRun();
   });
 
-  // Save Supabase Configuration
-  saveSupabaseConfigBtn.addEventListener('click', () => {
-    const url = supabaseUrlInput.value.trim();
-    const key = supabaseKeyInput.value.trim();
+  // Clear button
+  clearBtn.addEventListener('click', () => {
+    if (activeEventSource) {
+      activeEventSource.close();
+      activeEventSource = null;
+    }
+    allLeads = [];
+    currentPage = 1;
+    updateMetrics(0, 0, 0, 0);
+    renderActivePage();
+    progressBarFill.style.width = '0%';
+    progressPercentageText.textContent = '0%';
+    downloadBtn.disabled = true;
+    syncGoogleSheetsBtn.disabled = true;
+    syncSupabaseBtn.disabled = true;
+    downloadCountBadge.textContent = '0';
+    finishRun();
+    appendLog('🧹 Cleared all lead records from dashboard.');
+  });
 
-    if (!url || !key) {
-      setFeedback('Please provide both Project URL and Anon Key.', 'error');
+  // Download CSV
+  downloadBtn.addEventListener('click', () => {
+    const exportSubset = getFilteredLeads();
+    if (exportSubset.length === 0) {
+      alert('No leads available in current tab to export.');
       return;
     }
 
-    SupabaseManager.saveConfig(url, key);
-    setFeedback('Supabase credentials saved successfully to local workspace.', 'success');
-    updateCloudStatusPill(true);
-    appendLog(`☁️ Supabase credentials configured. Ready for cloud database export.`);
-    setTimeout(closeModal, 1500);
-  });
-
-  // Copy SQL Schema
-  copySqlSchemaBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(SupabaseManager.getSqlSchema()).then(() => {
-      copySqlSchemaBtn.innerHTML = '<span>✅</span> Copied!';
-      setTimeout(() => {
-        copySqlSchemaBtn.innerHTML = '<span>📋</span> Copy SQL Schema';
-      }, 2000);
+    appendLog(`📦 Exporting ${exportSubset.length} leads (${currentTab} tab) to CSV...`);
+    CsvExporter.exportLeadsToCsv(exportSubset, {
+      country: countrySelect.value,
+      industry: industrySelect.value,
+      currentTab
     });
   });
 
-  function updateCloudStatusPill(isConnected) {
-    if (isConnected) {
-      cloudStatusDot.className = 'cloud-dot connected';
-      cloudStatusText.textContent = 'Supabase: Connected';
-    } else {
-      cloudStatusDot.className = 'cloud-dot';
-      cloudStatusText.textContent = 'Supabase: Not Configured';
+  // Supabase sync
+  syncSupabaseBtn.addEventListener('click', async () => {
+    const exportSubset = getFilteredLeads();
+    if (exportSubset.length === 0) return;
+
+    syncSupabaseBtn.disabled = true;
+    syncSupabaseBtn.innerHTML = '<span>⏳</span> Syncing...';
+    try {
+      const res = await SupabaseManager.syncLeadsToSupabase(exportSubset, {
+        onProgress: (p) => {
+          syncSupabaseBtn.innerHTML = `<span>⏳</span> Syncing (${p.percentage}%)`;
+        }
+      });
+      alert(`Success! ${res.syncedCount} leads synchronized to Supabase.`);
+      appendLog(`🎉 Synced ${res.syncedCount} leads to Supabase!`, 'success');
+    } catch (err) {
+      alert(`Supabase Sync Error: ${err.message}`);
+      appendLog(`❌ Supabase Error: ${err.message}`, 'warning');
+    } finally {
+      syncSupabaseBtn.disabled = false;
+      syncSupabaseBtn.innerHTML = '<span>☁️</span> Sync to Supabase';
     }
+  });
+
+  // Google Sheets sync
+  syncGoogleSheetsBtn.addEventListener('click', async () => {
+    const exportSubset = getFilteredLeads();
+    if (exportSubset.length === 0) return;
+
+    syncGoogleSheetsBtn.disabled = true;
+    syncGoogleSheetsBtn.innerHTML = '<span>⏳</span> Syncing to Sheets...';
+    try {
+      const res = await GoogleSheetsManager.syncLeadsToGoogleSheets(exportSubset, {
+        onProgress: (p) => {
+          syncGoogleSheetsBtn.innerHTML = `<span>⏳</span> Syncing (${p.percentage}%)`;
+        }
+      });
+      alert(`Success! ${res.syncedCount} leads synchronized directly to Google Sheets.`);
+      appendLog(`🎉 Synced ${res.syncedCount} leads to Google Sheets!`, 'success');
+    } catch (err) {
+      alert(`Google Sheets Error: ${err.message}`);
+      appendLog(`❌ Google Sheets Error: ${err.message}`, 'warning');
+    } finally {
+      syncGoogleSheetsBtn.disabled = false;
+      syncGoogleSheetsBtn.innerHTML = '<span>📊</span> Sync to Sheets';
+    }
+  });
+
+  // Modals management
+  function openSupabaseModal() {
+    const config = SupabaseManager.getSavedConfig();
+    supabaseUrlInput.value = config.url || '';
+    supabaseKeyInput.value = config.key || '';
+    sqlSchemaPreview.textContent = SupabaseManager.getSqlSchema();
+    supabaseModal.style.display = 'flex';
+    supabaseModal.setAttribute('aria-hidden', 'false');
   }
 
-  // Initial cloud status check
-  const savedConfig = SupabaseManager.getSavedConfig();
-  if (savedConfig.url && savedConfig.key) {
-    updateCloudStatusPill(true);
+  function closeSupabaseModal() {
+    supabaseModal.style.display = 'none';
+    supabaseModal.setAttribute('aria-hidden', 'true');
   }
 
-  // 15. Google Sheets Modal & Configuration Management
+  openSupabaseModalBtn.addEventListener('click', openSupabaseModal);
+  cloudConfigOpenBtn.addEventListener('click', openSupabaseModal);
+  closeSupabaseModalBtn.addEventListener('click', closeSupabaseModal);
+
+  saveSupabaseConfigBtn.addEventListener('click', () => {
+    SupabaseManager.saveConfig(supabaseUrlInput.value, supabaseKeyInput.value);
+    alert('Supabase credentials saved locally.');
+    closeSupabaseModal();
+  });
+
+  copySqlSchemaBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(SupabaseManager.getSqlSchema());
+    alert('SQL Schema copied to clipboard! Paste it into Supabase SQL Editor.');
+  });
+
+  // Sheets modal
   function openSheetsModal() {
-    if (!sheetsModal) return;
-    const url = GoogleSheetsManager.getSavedWebhookUrl();
-    if (sheetsWebhookUrlInput) sheetsWebhookUrlInput.value = url;
-    if (appsScriptPreview) appsScriptPreview.textContent = GoogleSheetsManager.getGoogleAppsScriptCode();
-    if (sheetsFeedbackMsg) sheetsFeedbackMsg.style.display = 'none';
+    const config = GoogleSheetsManager.getSavedConfig();
+    sheetsWebhookUrlInput.value = config.webhookUrl || '';
+    appsScriptPreview.textContent = GoogleSheetsManager.getAppsScriptCode();
     sheetsModal.style.display = 'flex';
+    sheetsModal.setAttribute('aria-hidden', 'false');
   }
 
   function closeSheetsModal() {
-    if (sheetsModal) sheetsModal.style.display = 'none';
+    sheetsModal.style.display = 'none';
+    sheetsModal.setAttribute('aria-hidden', 'true');
   }
 
-  if (openSheetsModalBtn) openSheetsModalBtn.addEventListener('click', openSheetsModal);
-  if (closeSheetsModalBtn) closeSheetsModalBtn.addEventListener('click', closeSheetsModal);
+  openSheetsModalBtn.addEventListener('click', openSheetsModal);
+  closeSheetsModalBtn.addEventListener('click', closeSheetsModal);
 
-  if (sheetsModal) {
-    sheetsModal.addEventListener('click', (e) => {
-      if (e.target === sheetsModal) closeSheetsModal();
-    });
-  }
+  saveSheetsConfigBtn.addEventListener('click', () => {
+    GoogleSheetsManager.saveConfig(sheetsWebhookUrlInput.value);
+    alert('Google Sheets Webhook URL saved locally.');
+    closeSheetsModal();
+  });
 
-  function setSheetsFeedback(msg, type = 'success') {
-    if (!sheetsFeedbackMsg) return;
-    sheetsFeedbackMsg.className = `feedback-msg ${type}`;
-    sheetsFeedbackMsg.textContent = msg;
-    sheetsFeedbackMsg.style.display = 'block';
-  }
-
-  // Test Sheets Connection
-  if (testSheetsConnectionBtn) {
-    testSheetsConnectionBtn.addEventListener('click', async () => {
-      const url = sheetsWebhookUrlInput ? sheetsWebhookUrlInput.value.trim() : '';
-      testSheetsConnectionBtn.disabled = true;
-      testSheetsConnectionBtn.innerHTML = '<span>⏳</span> Testing...';
-
-      const res = await GoogleSheetsManager.testConnection(url);
-      testSheetsConnectionBtn.disabled = false;
-      testSheetsConnectionBtn.innerHTML = '<span>🔌</span> Test Webhook';
-
-      if (res.success) {
-        setSheetsFeedback(res.message, 'success');
-      } else {
-        setSheetsFeedback(res.message, 'error');
-      }
-    });
-  }
-
-  // Save Sheets Configuration
-  if (saveSheetsConfigBtn) {
-    saveSheetsConfigBtn.addEventListener('click', () => {
-      const url = sheetsWebhookUrlInput ? sheetsWebhookUrlInput.value.trim() : '';
-      if (!url) {
-        setSheetsFeedback('Please enter your Google Apps Script Web App URL.', 'error');
-        return;
-      }
-
-      GoogleSheetsManager.saveWebhookUrl(url);
-      setSheetsFeedback('Google Sheets Webhook URL saved successfully!', 'success');
-      appendLog(`📊 Google Sheets Webhook configured. Ready for direct spreadsheet synchronization.`);
-      setTimeout(closeSheetsModal, 1500);
-    });
-  }
-
-  // Copy Apps Script Code
-  if (copyAppsScriptBtn) {
-    copyAppsScriptBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(GoogleSheetsManager.getGoogleAppsScriptCode()).then(() => {
-        copyAppsScriptBtn.innerHTML = '<span>✅</span> Copied Script!';
-        setTimeout(() => {
-          copyAppsScriptBtn.innerHTML = '<span>📋</span> Copy Apps Script Code';
-        }, 2000);
-      });
-    });
-  }
-
-  function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/[&<>"']/g, function(m) {
-      switch (m) {
-        case '&': return '&amp;';
-        case '<': return '&lt;';
-        case '>': return '&gt;';
-        case '"': return '&quot;';
-        case "'": return '&#039;';
-        default: return m;
-      }
-    });
-  }
+  copyAppsScriptBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(GoogleSheetsManager.getAppsScriptCode());
+    alert('Google Apps Script code copied to clipboard!');
+  });
 });

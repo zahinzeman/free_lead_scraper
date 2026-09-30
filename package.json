@@ -4,11 +4,16 @@
   "description": "High-performance business directory lead scraper and CSV exporter",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node test/test-pipeline.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
+    "cheerio": "^1.2.0",
     "cors": "^2.8.5",
-    "express": "^4.21.2"
+    "dotenv": "^18.0.4",
+    "duckdb": "^1.4.4",
+    "express": "^4.21.2",
+    "playwright": "^1.63.0"
   }
 }

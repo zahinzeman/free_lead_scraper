@@ -1,0 +1,35 @@
+# SearXNG Configuration for Lead Scraper
+# Enables JSON output format and disables rate limiters for local automated verification
+
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "Local SearXNG Verifier"
+
+server:
+  port: 8080
+  bind_address: "0.0.0.0"
+  secret_key: "lead_scraper_local_searxng_secret_key_random"
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: ""
+  formats:
+    - html
+    - json
+
+engines:
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    use_mobile_ui: false
+  - name: google
+    engine: google
+    shortcut: g
+  - name: bing
+    engine: bing
+    shortcut: b

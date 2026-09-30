@@ -151,19 +151,22 @@ const SupabaseManager = (function () {
         const sourceUrl = lead.sourceUrl || (lead.website && /google\.[a-z.]+\/maps|maps\.google\.|goo\.gl\/maps/i.test(lead.website) ? lead.website : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanQuery)}`);
 
         return {
-          country: lead.country,
+          country: lead.country || '',
           state: lead.state || '',
           city: lead.city || '',
-          business_name: lead.businessName,
+          business_name: lead.businessName || lead.name || '',
           owner_name: lead.ownerName || '',
           phone: lead.phone || '',
-          website: cleanWeb,
-          website_status: cleanStatus,
-          source: lead.source || 'Google Maps',
-          source_url: sourceUrl,
-          industry: lead.industry,
-          verified: Boolean(lead.verified),
-          scraped_at: lead.scrapedAt || new Date().toISOString()
+          website: lead.website || '',
+          website_status: lead.websiteCheckStatus || (lead.hasWebsite ? 'Has website' : 'Confirmed no website'),
+          website_check_status: lead.websiteCheckStatus || '',
+          confidence: lead.confidence || 'medium',
+          website_evidence: lead.websiteEvidence || '',
+          source_provider: lead.sourceProvider || lead.source || '',
+          source_url: lead.sourceUrl || '',
+          social_profile: lead.socialProfile || '',
+          industry: lead.industry || lead.category || '',
+          checked_at: lead.checkedAt || new Date().toISOString()
         };
       });
 
@@ -195,7 +198,7 @@ const SupabaseManager = (function () {
 
   function getSqlSchema() {
     return `-- ==========================================================
--- Lead Scraper Pro - Supabase PostgreSQL Table Schema
+-- Free Lead Scraper - Supabase PostgreSQL Table Schema
 -- Run this in your Supabase Dashboard -> SQL Editor -> New query
 -- ==========================================================
 
@@ -208,12 +211,14 @@ create table if not exists public.leads (
   owner_name text,
   phone text,
   website text,
-  website_status text default '200 OK (Live)',
-  source text default 'Google Maps',
+  website_status text,
+  website_check_status text,
+  website_evidence text,
+  source_provider text,
   source_url text,
+  social_profile text,
   industry text not null,
-  verified boolean default true,
-  scraped_at text,
+  checked_at timestamp with time zone default timezone('utc'::text, now()),
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
@@ -235,6 +240,7 @@ create policy "Allow public read"
 -- Useful indexes for fast search and filtering
 create index if not exists idx_leads_country on public.leads(country);
 create index if not exists idx_leads_industry on public.leads(industry);
+create index if not exists idx_leads_website_check on public.leads(website_check_status);
 create index if not exists idx_leads_state on public.leads(state);
 `;
   }

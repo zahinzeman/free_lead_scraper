@@ -1,111 +1,81 @@
-# Free Lead Scraper Pro
+# Free Real-Data Lead Scraper & Website Verifier
 
-This SaaS is used for scraping leads. It is a high-performance business directory mining and verified lead extraction engine with dynamic state/territory-level targeting, 20 specialized industries, separate contact toggles, strict local filtering (max 2 locations cap & multi-country prohibition), 100,000-lead throughput, Google Sheets integration, and Supabase cloud database synchronization.
+A 100% free local business discovery engine and multi-layer website verifier designed specifically to find genuine, active local businesses that truly have **no website**, so you can pitch web design, SEO, and digital services with zero false positives.
+
+Zero paid APIs. Zero credit cards. Zero fabricated leads.
 
 ---
 
-## 🌟 Key Features
+## 🌟 Key Architecture
 
-### 1. 20 Specialized Industries
-Target genuine independent businesses across 20 dedicated sectors:
-1. **Plumbers**
-2. **Electricians**
-3. **HVAC**
-4. **Landscapers**
-5. **Pest Control**
-6. **Cleaning Services**
-7. **Handymen**
-8. **Locksmiths**
-9. **Independent Accountants**
-10. **Real Estate Agents**
-11. **Architects**
-12. **Massage Therapists**
-13. **Chiropractors**
-14. **Physiotherapists**
-15. **Independent Dental/Medical Clinics (Single-Location)**
-16. **Bakeries**
-17. **Independent Auto Repair Shops**
-18. **Detailing Services**
-19. **Event Planners**
-20. **Interior Design**
+### 1. 100% Real Data Pipeline
+- **OpenStreetMap via Overpass API**: Live geographic queries using industry tag mappings (`craft=*`, `shop=*`, `amenity=*`, `office=*`) bounded by city/state bounding boxes.
+- **Overture Maps Foundation**: Direct open Apache Parquet queries over AWS S3 via DuckDB (anonymous access, no credentials required).
+- **UK FSA Food Hygiene Ratings**: Open government database with 100% complete records of UK bakeries and food establishments.
+- **Government Registries**: High-trust entity candidate sources.
+- **Opt-In Self-Hosted Scraping**: Playwright Google Maps searcher (opt-in only, respects ToS, halts immediately on any CAPTCHA).
 
-### 2. Multi-Country Market Coverage
-Full country-level and regional targeting with accurate dial codes and localized directory datasets:
-- 🇺🇸 **United States** (All 50 states + Washington D.C.)
-- 🇦🇺 **Australia** (All 8 states and territories)
-- 🇬🇧 **United Kingdom** (England, Scotland, Wales, Northern Ireland, Greater London, etc.)
-- 🇳🇿 **New Zealand** (Auckland, Canterbury, Wellington, Waikato, etc.)
-- 🇮🇪 **Ireland** (County Dublin, Cork, Galway, Limerick, Waterford, etc.)
-- 🇸🇪 **Sweden** (Stockholm, Skåne, Västra Götaland, Uppsala, etc.)
-- 🇳🇱 **Netherlands** (North Holland, South Holland, Utrecht, North Brabant, Gelderland, Overijssel, etc.)
+### 2. Multi-Layer "Has Website" Verification Waterfall
+A business is categorized into one of 4 mutually exclusive statuses:
+1. **`Has website`**: Matching website found via source tags, web search, domain guessing, archive, or social bio.
+2. **`Confirmed no website`**: All 6 layers executed cleanly, all searches succeeded with 0 matches, domain guessing checked negative, and social profile either has a verified public bio with no website link or does not exist. (Confidence: `high` if phone verified, `medium` if verified via dual search without phone).
+3. **`No website found (social only, bio unread)`**: All web searches and domain guessing ran cleanly with 0 matches, but the only identified online presence is a social profile (Facebook, Instagram) whose bio was unreadable due to HTTP 400, login walls, or cookie consent walls.
+4. **`Uncertain`**: Any search layer was blocked, challenged, or timed out; or missing phone without any borough/street/postcode locality data. (Confidence: `low`).
 
-### 3. 🛡️ Strict Local Filter (Max 2 Locations & No Multi-Country)
-- **Max 2 Locations Hard Cap**: Businesses appearing more than 2 times in the dataset are strictly excluded and substituted with authentic independent domestic contractors to ensure true local businesses.
-- **No Multi-Country Chains**: Automatically blocks multinational corporations, global franchises, and cross-border chains (*e.g., CBRE, JLL, Century 21, RE/MAX, PwC, Deloitte, EY, KPMG, Rentokil, Terminix, Bupa, Starbucks, McDonald's, etc.*).
-- **Profession-Specific Demographics**: Offline and independent businesses include authentic titles tailored to their profession (*"CPA & Managing Partner"*, *"Principal Architect"*, *"Doctor of Chiropractic & Owner"*, *"Principal Dental Surgeon"*, etc.).
-
-### 4. Website Presence Modes
-- **🌐 Live Websites Only**: 100% active, verified 200 OK operating business websites.
-- **📵 Confirmed NO Website (Agency Outreach)**: Targeted leads for web development, SEO, and digital marketing outreach who have zero website footprint.
-- **⚡ Mixed / Both**: 50/50 mix of active web domains and offline trade businesses.
-
-### 5. Flexible Contact Toggles
-- `☑️ Working Websites (100% Live)`
-- `☑️ Verified Phone Numbers (Real Local Dialing Formats)`
-- Select websites only, phone numbers only, or both!
-
-### 6. High-Speed Quota Support (Up to 100,000 Leads)
-- Options for **1,000**, **5,000**, **10,000**, **30,000**, **70,000**, and **100,000** leads.
-- Ultra-fast chunked processing generating 100,000 leads in ~6-8 seconds (~15,000 leads/sec).
-
-### 7. Integrations & Export
-- **📊 1-Click Google Sheets Sync**: Connect your Google Apps Script webhook to push extracted leads directly into a live Google Sheet.
-- **☁️ Supabase PostgreSQL Sync**: Direct synchronization to Supabase cloud database with 1-click SQL schema generator.
-- **📥 High-Performance CSV Stream**: Instant, memory-safe CSV export with UTF-8 BOM encoding for Excel, CRM, and spreadsheet import.
+### 3. Search Engine Adaptive Pacing & Persistent Caching
+- **Adaptive Pacing**: If DuckDuckGo presents a challenge or rate limit, pacing delay automatically steps up from 2.5s to up to 12s, with a 2-minute cooldown timer.
+- **Persistent Disk Caching**: All successful search queries are persistently cached in `.cache/search_queries.json`, making retries instantaneous with zero network calls.
 
 ---
 
 ## 🚀 Quick Start
 
-### Option 1: Direct in Browser (Zero Installation)
-Simply double-click or open `index.html` in Google Chrome, Edge, Brave, or Safari.
-
-### Option 2: Local Node.js Server
+### 1. Install Dependencies
 ```bash
-# Clone the repository
-git clone https://github.com/zahinzeman/free_lead_scraper.git
-cd free_lead_scraper
-
-# Install dependencies (optional, for local proxy server)
 npm install
+```
 
-# Start local server
+### 2. Optional: Self-Hosted SearXNG Search Backend (One Command)
+A complete SearXNG setup with JSON API enabled is preconfigured in `docker-compose.yml` and `searxng/settings.yml`:
+```bash
+docker compose up -d
+```
+*Note on this host: Docker is currently NOT installed/running on this machine (`docker: command not found`). The scraper automatically uses DuckDuckGo HTML/Lite with zero setup required.*
+
+### 3. Start Server
+```bash
 npm start
-# or: node server.js
 ```
 Open [http://localhost:3000](http://localhost:3000) in your web browser.
 
 ---
 
-## 📊 Google Sheets Setup
+## 🔍 CLI Spot-Check Tool
 
-1. Open Google Sheets and go to **Extensions $\rightarrow$ Apps Script**.
-2. Paste the provided Google Apps Script code from the **Google Sheets Settings** modal.
-3. Click **Deploy $\rightarrow$ New Deployment $\rightarrow$ Web app**.
-4. Set **Who has access** to **Anyone**.
-5. Copy the Web App URL and paste it into the dashboard modal.
-6. Click **Sync to Sheets** to stream leads directly into your spreadsheet.
+You can audit any lead manually and see the full evidence trail from your terminal:
+```bash
+node verify.js "<business name>" "<city>" [phone] [country]
+```
 
----
-
-## ☁️ Supabase Setup
-
-1. Open the **Database Settings** modal in the dashboard.
-2. Click **Copy SQL Schema** and run it in your **Supabase Dashboard $\rightarrow$ SQL Editor**.
-3. Paste your **Supabase Project URL** and **Anon Key**, click **Save Credentials**.
-4. Extract your leads and click **Sync to Supabase**!
+**Example:**
+```bash
+node verify.js "Chinatown Bakery" "London" "" "United Kingdom"
+node verify.js "Efficient AC, Electric & Plumbing" "Austin" "+1-512-501-2275"
+```
 
 ---
 
-## 📄 License
-MIT License. Free for commercial and personal lead generation use.
+## 🧪 Automated Testing
+
+Run the test suite verifying provider allowlist enforcement, search failure uncertainty fallback, parked domain detection, and regression on known-website businesses:
+```bash
+npm test
+```
+
+---
+
+## 📊 Exporting Leads
+
+- **CSV Export**: Downloads a clean CSV with `sourceProvider`, `sourceUrl`, `websiteCheckStatus`, `websiteEvidence`, `socialProfile`, and `checkedAt`.
+- **Google Sheets Sync**: Streams leads directly into your Google Sheet via Google Apps Script Webhook.
+- **Supabase Cloud Sync**: Synchronizes leads directly into a Supabase PostgreSQL database table.

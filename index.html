@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lead Scraper Pro - Enterprise Multi-Country Business Lead Extractor</title>
-  <meta name="description" content="Extract up to 100,000 verified business leads across the US, Australia, UK, New Zealand, Ireland, Sweden, and the Netherlands with live working websites, direct state targeting, and instant Supabase cloud database synchronization.">
+  <meta name="description" content="Discover verified local business leads across the US, Australia, UK, New Zealand, Ireland, Sweden, and the Netherlands with zero-cost open data and multi-layer website verification. Number of leads depends on real data found.">
   <link rel="stylesheet" href="style.css">
   <!-- Supabase Official Client JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -46,7 +46,7 @@
           <h2 class="panel-title" id="configSectionTitle">
             <span>⚙️</span> Target Configuration & Filtering
           </h2>
-          <span class="panel-desc">Select country, state/region, industry, contact checkboxes, and quota up to 100,000 leads</span>
+          <span class="panel-desc">Select country, state/region, industry, contact checkboxes, and quota (yield depends on real data found)</span>
         </div>
 
         <div class="config-grid">
@@ -111,6 +111,44 @@
             </div>
           </div>
 
+          <!-- Data Source Dropdown (Primary) -->
+          <div class="form-group">
+            <label for="primarySourceSelect" class="form-label">
+              <span>🗄️</span> Primary Data Source <span class="req">*</span>
+            </label>
+            <div class="custom-select-wrapper">
+              <select id="primarySourceSelect" class="custom-select" required>
+                <!-- Populated dynamically via GET /api/providers -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Data Source Dropdown (Optional Fallback) -->
+          <div class="form-group">
+            <label for="fallbackSourceSelect" class="form-label">
+              <span>🔄</span> Optional Fallback Source
+            </label>
+            <div class="custom-select-wrapper">
+              <select id="fallbackSourceSelect" class="custom-select">
+                <option value="">None (Primary Only)</option>
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Website Verification Method Dropdown -->
+          <div class="form-group">
+            <label for="verificationMethodSelect" class="form-label">
+              <span>🛡️</span> Website Verification Method <span class="req">*</span>
+            </label>
+            <div class="custom-select-wrapper">
+              <select id="verificationMethodSelect" class="custom-select" required>
+                <option value="duckduckgo_html" selected>🦆 DuckDuckGo HTML (100% Free, No Key)</option>
+                <option value="searxng">🐳 SearXNG (Self-Hosted Docker, Free)</option>
+              </select>
+            </div>
+          </div>
+
           <!-- Website Presence Filter (Live Websites vs Confirmed No-Website Leads) -->
           <div class="form-group">
             <label for="websiteFilterSelect" class="form-label">
@@ -118,8 +156,8 @@
             </label>
             <div class="custom-select-wrapper">
               <select id="websiteFilterSelect" class="custom-select" required>
-                <option value="with_website" selected>🌐 Live Websites Only (100% Active Sites)</option>
-                <option value="no_website">📵 Confirmed NO Website Only (Agency Outreach Leads)</option>
+                <option value="no_website" selected>📵 Confirmed NO Website Only (Agency Pitch Leads)</option>
+                <option value="with_website">🌐 Live Websites Only</option>
                 <option value="all">⚡ Both / Any (Include With & Without Websites)</option>
               </select>
             </div>
@@ -128,41 +166,35 @@
           <!-- Separate Contact Checkboxes -->
           <div class="form-group">
             <label class="form-label">
-              <span>📇</span> Contact Information Required <span class="req">*</span>
+              <span>📇</span> Contact Filters & Local Rules <span class="req">*</span>
             </label>
             <div class="contact-checkbox-group">
               <label class="checkbox-pill">
-                <input type="checkbox" id="includeWebsitesCheck" checked>
+                <input type="checkbox" id="includePhonesCheck">
                 <span class="checkbox-custom"></span>
-                <span class="checkbox-text">🌐 Working Websites (100% Live)</span>
+                <span class="checkbox-text">📞 Must Have Phone Number</span>
               </label>
-              <label class="checkbox-pill">
-                <input type="checkbox" id="includePhonesCheck" checked>
-                <span class="checkbox-custom"></span>
-                <span class="checkbox-text">📞 Verified Phone Numbers</span>
-              </label>
-              <label class="checkbox-pill" title="Blocks businesses with more than 2 locations and all multi-country multinational corporations">
+              <label class="checkbox-pill" title="Blocks businesses with more than 2 locations and all multi-country corporate chains">
                 <input type="checkbox" id="excludeChainsCheck" checked>
                 <span class="checkbox-custom"></span>
-                <span class="checkbox-text">🛡️ Strict Local Filter (Max 2 Locs, No Multi-Country)</span>
+                <span class="checkbox-text">🛡️ Strict Local Filter (Max 2 Locs, No Chains)</span>
               </label>
             </div>
           </div>
 
-          <!-- Target Lead Volume Selector (Up to 100,000) -->
+          <!-- Target Lead Volume Selector (Real Maximum Cap) -->
           <div class="form-group full-width-sm">
             <label class="form-label">
-              <span>🎯</span> Lead Quota (Max: 100,000 Leads) <span class="req">*</span>
+              <span>🎯</span> Maximum Quota Cap (Stops when real leads exhausted) <span class="req">*</span>
             </label>
             <div class="quota-selector" id="quotaSelectorGroup">
-              <button type="button" class="quota-btn active" data-quota="1000" id="quotaBtn1k">1,000</button>
-              <button type="button" class="quota-btn" data-quota="5000" id="quotaBtn5k">5,000</button>
-              <button type="button" class="quota-btn" data-quota="10000" id="quotaBtn10k">10,000</button>
-              <button type="button" class="quota-btn" data-quota="30000" id="quotaBtn30k">30,000</button>
-              <button type="button" class="quota-btn highlight" data-quota="70000" id="quotaBtn70k">70,000</button>
-              <button type="button" class="quota-btn mega-highlight" data-quota="100000" id="quotaBtn100k">100,000</button>
+              <button type="button" class="quota-btn active" data-quota="50" id="quotaBtn50">50</button>
+              <button type="button" class="quota-btn" data-quota="100" id="quotaBtn100">100</button>
+              <button type="button" class="quota-btn" data-quota="250" id="quotaBtn250">250</button>
+              <button type="button" class="quota-btn" data-quota="500" id="quotaBtn500">500</button>
+              <button type="button" class="quota-btn highlight" data-quota="1000" id="quotaBtn1000">1,000</button>
             </div>
-            <input type="hidden" id="selectedQuotaInput" value="1000">
+            <input type="hidden" id="selectedQuotaInput" value="50">
           </div>
         </div>
 
@@ -201,34 +233,42 @@
       <!-- Real-time Telemetry & Metrics -->
       <section class="metrics-grid" aria-label="Scraper Live Metrics">
         <div class="metric-card">
-          <div class="metric-icon emerald">📊</div>
+          <div class="metric-icon cyan">📡</div>
           <div class="metric-data">
-            <span class="metric-label">Total Leads Gathered</span>
+            <span class="metric-label">Candidates Evaluated</span>
             <span class="metric-value" id="metricTotalLeads">0</span>
           </div>
         </div>
 
-        <div class="metric-card">
-          <div class="metric-icon cyan">📞</div>
+        <div class="metric-card" id="metricNoWebsiteCard">
+          <div class="metric-icon emerald">📵</div>
           <div class="metric-data">
-            <span class="metric-label">Verified Phone Numbers</span>
-            <span class="metric-value" id="metricVerifiedPhones">0</span>
+            <span class="metric-label">Confirmed NO Website</span>
+            <span class="metric-value" id="metricConfirmedNoWebsite">0</span>
+          </div>
+        </div>
+
+        <div class="metric-card" id="metricSocialOnlyCard">
+          <div class="metric-icon purple">📱</div>
+          <div class="metric-data">
+            <span class="metric-label">Social Only (Bio Unread)</span>
+            <span class="metric-value" id="metricSocialOnly">0</span>
           </div>
         </div>
 
         <div class="metric-card" id="metricWebsitesCard">
-          <div class="metric-icon indigo" id="metricWebsitesIcon">🌐</div>
+          <div class="metric-icon indigo">🌐</div>
           <div class="metric-data">
-            <span class="metric-label" id="metricWebsitesLabel">Working Websites</span>
+            <span class="metric-label">Has Website</span>
             <span class="metric-value" id="metricWebsites">0</span>
           </div>
         </div>
 
         <div class="metric-card">
-          <div class="metric-icon amber">⚡</div>
+          <div class="metric-icon amber">⚠️</div>
           <div class="metric-data">
-            <span class="metric-label">Throughput Velocity</span>
-            <span class="metric-value" id="metricVelocity">0 /s</span>
+            <span class="metric-label">Uncertain (Review)</span>
+            <span class="metric-value" id="metricUncertain">0</span>
           </div>
         </div>
       </section>
@@ -247,7 +287,7 @@
 
         <!-- Terminal Console -->
         <div class="terminal-wrapper" id="terminalLog">
-          <div class="terminal-line">[System] Lead Scraper Engine initialized. Ready to begin directory discovery.</div>
+          <div class="terminal-line">[System] Free Lead Scraper Engine initialized. Real data pipelines active.</div>
         </div>
       </section>
 
@@ -256,14 +296,33 @@
         <div class="table-controls">
           <div>
             <h2 class="panel-title" id="tableHeading">
-              <span>📋</span> Live Lead Stream (<span id="tableLeadCount">0</span>)
+              <span>📋</span> Verified Leads Stream (<span id="tableLeadCount">0</span>)
             </h2>
-            <span class="panel-desc">Interactive preview of captured leads with verified contacts and decision makers</span>
+            <span class="panel-desc">Real businesses audited via 6-layer zero-cost verification</span>
           </div>
           <div class="search-box">
             <span class="search-icon">🔍</span>
-            <input type="text" class="search-input" id="tableSearchInput" placeholder="Search business, state, city, phone...">
+            <input type="text" class="search-input" id="tableSearchInput" placeholder="Search business, city, phone, evidence...">
           </div>
+        </div>
+
+        <!-- Stream Tabs -->
+        <div class="table-tabs" role="tablist">
+          <button type="button" class="table-tab-btn active" data-tab="all" id="tabAll">
+            <span>📋</span> All Leads (<span id="tabCountAll">0</span>)
+          </button>
+          <button type="button" class="table-tab-btn" data-tab="no_website" id="tabNoWebsite">
+            <span>📵</span> Confirmed No Website (<span id="tabCountNoWebsite">0</span>)
+          </button>
+          <button type="button" class="table-tab-btn" data-tab="no_website_social_only" id="tabNoWebsiteSocialOnly">
+            <span>📱</span> Social Only (Bio Unread) (<span id="tabCountNoWebsiteSocialOnly">0</span>)
+          </button>
+          <button type="button" class="table-tab-btn" data-tab="with_website" id="tabWithWebsite">
+            <span>🌐</span> Has Website (<span id="tabCountWithWebsite">0</span>)
+          </button>
+          <button type="button" class="table-tab-btn tab-uncertain" data-tab="uncertain" id="tabUncertain">
+            <span>⚠️</span> Uncertain (<span id="tabCountUncertain">0</span>)
+          </button>
         </div>
 
         <div class="table-responsive">
@@ -271,24 +330,23 @@
             <thead>
               <tr>
                 <th>#</th>
-                <th>Country</th>
-                <th>State / Region</th>
                 <th>Business Name</th>
-                <th>Owner / Decision Maker</th>
-                <th id="thPhone">Verified Phone</th>
-                <th id="thWebsite">Website URL</th>
-                <th id="thStatus">Website Status</th>
-                <th id="thSource">Scraped Source</th>
-                <th>Industry</th>
-                <th>Status</th>
+                <th>Location</th>
+                <th>Phone</th>
+                <th>Website Status</th>
+                <th>Confidence</th>
+                <th>Website URL</th>
+                <th>Verification Evidence</th>
+                <th>Source Record</th>
+                <th>Social Profile</th>
               </tr>
             </thead>
             <tbody id="leadsTableBody">
               <tr>
-                <td colspan="11">
+                <td colspan="10">
                   <div class="empty-state">
                     <div class="empty-icon">📁</div>
-                    <p>No leads extracted yet. Configure your criteria above and click <strong>Start Scraper</strong> to extract up to 100,000 leads.</p>
+                    <p>No leads extracted yet. Configure your criteria above and click <strong>Start Scraper</strong> to discover and verify real businesses.</p>
                   </div>
                 </td>
               </tr>

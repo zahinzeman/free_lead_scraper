@@ -1,7 +1,7 @@
 /**
  * CSV Exporter Module
- * High-performance streaming CSV generator capable of exporting 100,000+ leads
- * into downloadable CSV without memory leaks or UI freeze.
+ * High-performance streaming CSV generator for real lead datasets.
+ * Includes complete verification evidence trail, real source records, and social profiles.
  */
 
 const CsvExporter = (function () {
@@ -14,117 +14,69 @@ const CsvExporter = (function () {
     return `"${str}"`;
   }
 
-  function deduplicateLeads(leads) {
-    if (!leads || !Array.isArray(leads)) return [];
-    const seenWebsites = new Set();
-    const seenBusinesses = new Set();
-    const seenPhones = new Set();
-    const unique = [];
-
-    for (let i = 0; i < leads.length; i++) {
-      const lead = leads[i];
-      if (!lead) continue;
-
-      const webKey = (lead.website || "").trim().toLowerCase().replace(/\/+$/, "");
-      const bizKey = (lead.businessName || "").trim().toLowerCase();
-      const phoneKey = (lead.phone || "").replace(/[^0-9]/g, "");
-
-      // If a website url matches another one for another business, list only one
-      if (webKey && seenWebsites.has(webKey)) {
-        continue;
-      }
-      if (bizKey && seenBusinesses.has(bizKey)) {
-        continue;
-      }
-      if (phoneKey && seenPhones.has(phoneKey)) {
-        continue;
-      }
-
-      if (webKey) seenWebsites.add(webKey);
-      if (bizKey) seenBusinesses.add(bizKey);
-      if (phoneKey) seenPhones.add(phoneKey);
-
-      unique.push(lead);
-    }
-    return unique;
-  }
-
   function exportLeadsToCsv(leads, options = {}) {
-    const cleanLeads = deduplicateLeads(leads);
-    if (!cleanLeads || cleanLeads.length === 0) {
+    if (!leads || !Array.isArray(leads) || leads.length === 0) {
       alert("No valid leads available to export. Please run the scraper first.");
       return false;
     }
 
-    const includeWebsites = options.includeWebsites !== false;
-    const includePhones = options.includePhones !== false;
     const country = options.country || "All";
-    const state = options.state || "All";
     const industry = options.industry || "General";
+    const currentTab = options.currentTab || "all";
 
-    // Build dynamic headers based on contact selections
     const headers = [
       "Country",
       "State / Region",
       "City",
+      "Address",
       "Business Name",
-      "Owner Name"
+      "Owner / Decision Maker",
+      "Phone Number",
+      "Website URL",
+      "Website Check Status",
+      "Social Presence Only (Bio Unread)",
+      "Confidence",
+      "Verification Evidence",
+      "Data Source",
+      "Source URL",
+      "Social Profile",
+      "Industry",
+      "Checked At"
     ];
-
-    if (includePhones) {
-      headers.push("Phone Number");
-    }
-
-    if (includeWebsites) {
-      headers.push("Website");
-      headers.push("Website Status");
-    }
-
-    headers.push("Scraped Source", "Source URL");
-    headers.push("Industry", "Verification Status", "Scraped At");
 
     const blobParts = [];
     blobParts.push("\uFEFF"); // UTF-8 BOM
     blobParts.push(headers.map(escapeCsvField).join(",") + "\r\n");
 
-    // Chunk in slices of 2500 for optimal memory footprint up to 100,000+ items
     const CHUNK_SIZE = 2500;
-    for (let i = 0; i < cleanLeads.length; i += CHUNK_SIZE) {
-      const slice = cleanLeads.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < leads.length; i += CHUNK_SIZE) {
+      const slice = leads.slice(i, i + CHUNK_SIZE);
       let chunkStr = "";
 
       for (let j = 0; j < slice.length; j++) {
         const lead = slice[j];
+        const status = lead.websiteCheckStatus || (lead.hasWebsite ? "Has website" : "Confirmed no website");
+        const isSocialOnly = status === "No website found (social only, bio unread)" ? "Yes" : "No";
+
         const row = [
-          lead.country,
+          lead.country || "",
           lead.state || "",
           lead.city || "",
-          lead.businessName,
-          lead.ownerName || "N/A"
+          lead.address || "",
+          lead.businessName || lead.name || "",
+          lead.ownerName || "", // Real registry data only, blank when unknown
+          lead.phone || "",
+          lead.website || "",
+          status,
+          isSocialOnly,
+          lead.confidence || "medium",
+          lead.websiteEvidence || "",
+          lead.sourceProvider || lead.source || "",
+          lead.sourceUrl || "",
+          lead.socialProfile || "",
+          lead.industry || lead.category || "",
+          lead.checkedAt || new Date().toISOString()
         ];
-
-        if (includePhones) {
-          row.push(lead.phone || "");
-        }
-
-        if (includeWebsites) {
-          const isMaps = lead.website && /google\.[a-z.]+\/maps|maps\.google\.|goo\.gl\/maps/i.test(lead.website);
-          const cleanWeb = isMaps ? "" : (lead.website || "");
-          const cleanStatus = isMaps ? "No Website Detected" : (lead.websiteStatus || (cleanWeb ? "200 OK (Live)" : "No Website Detected"));
-          row.push(cleanWeb);
-          row.push(cleanStatus);
-        }
-
-        const cleanQuery = `${lead.businessName || ''} ${lead.city || ''} ${lead.state || ''}`.trim();
-        const sourceUrl = lead.sourceUrl || (lead.website && /google\.[a-z.]+\/maps|maps\.google\.|goo\.gl\/maps/i.test(lead.website) ? lead.website : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanQuery)}`);
-        row.push(lead.source || "Google Maps");
-        row.push(sourceUrl);
-
-        row.push(
-          lead.industry,
-          lead.verified ? "Verified" : "Pending",
-          lead.scrapedAt
-        );
 
         chunkStr += row.map(escapeCsvField).join(",") + "\r\n";
       }
@@ -135,12 +87,11 @@ const CsvExporter = (function () {
     const blob = new Blob(blobParts, { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
 
-    const websiteFilter = options.websiteFilter || "with_website";
-    const filterTag = websiteFilter === "no_website" ? "NoWebsite_" : (websiteFilter === "all" ? "MixedWeb_" : "");
+    const tag = currentTab !== "all" ? `${currentTab}_` : "";
     const sanitizedCountry = country.replace(/[^a-zA-Z0-9]/g, "_");
     const sanitizedIndustry = industry.replace(/[^a-zA-Z0-9]/g, "_");
     const timestamp = new Date().toISOString().split("T")[0];
-    const filename = `Leads_${filterTag}${sanitizedCountry}_${sanitizedIndustry}_${cleanLeads.length}leads_${timestamp}.csv`;
+    const filename = `Leads_${tag}${sanitizedCountry}_${sanitizedIndustry}_${leads.length}leads_${timestamp}.csv`;
 
     const link = document.createElement("a");
     link.href = url;
@@ -154,7 +105,7 @@ const CsvExporter = (function () {
     return {
       success: true,
       filename: filename,
-      count: cleanLeads.length
+      count: leads.length
     };
   }
 

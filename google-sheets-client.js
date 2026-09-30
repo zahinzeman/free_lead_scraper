@@ -170,11 +170,13 @@ const GoogleSheetsManager = (function () {
           phone: lead.phone || '',
           website: cleanWeb,
           websiteStatus: cleanStatus,
-          source: lead.source || 'Google Maps',
+          websiteCheckStatus: lead.websiteCheckStatus || cleanStatus,
+          confidence: lead.confidence || 'medium',
+          source: lead.sourceProvider || lead.source || 'Open POI',
           sourceUrl: sourceUrl,
           industry: lead.industry,
           verified: Boolean(lead.verified),
-          scrapedAt: lead.scrapedAt || new Date().toISOString()
+          scrapedAt: lead.checkedAt || lead.scrapedAt || new Date().toISOString()
         };
       });
 
@@ -258,11 +260,12 @@ function doPost(e) {
         "Verified Phone",
         "Website URL",
         "Website Status",
-        "Scraped Source",
+        "Verification Evidence",
+        "Data Source",
         "Source Link",
+        "Social Profile",
         "Industry",
-        "Verification Status",
-        "Scraped At"
+        "Checked At"
       ];
       sheet.appendRow(headers);
       sheet.getRange(1, 1, 1, headers.length)
@@ -305,44 +308,39 @@ function doPost(e) {
       var leadBiz = String(lead.businessName || "").trim().toLowerCase();
       var leadPhone = String(lead.phone || "").replace(/[^0-9]/g, "");
 
-      // If website URL matches another one, list only one (skip duplicate)
       if (leadWeb && existingWebsites[leadWeb]) {
         skippedDuplicates++;
         continue;
       }
-
-      // If business name matches another one, skip duplicate
       if (leadBiz && existingBusinesses[leadBiz]) {
         skippedDuplicates++;
         continue;
       }
-
-      // If phone matches another one, skip duplicate
       if (leadPhone && existingPhones[leadPhone]) {
         skippedDuplicates++;
         continue;
       }
 
-      // Mark as seen so subsequent items in the batch are also deduplicated
       if (leadWeb) existingWebsites[leadWeb] = true;
       if (leadBiz) existingBusinesses[leadBiz] = true;
       if (leadPhone) existingPhones[leadPhone] = true;
 
       rowsToInsert.push([
-        lead.id,
-        lead.country,
+        lead.id || "",
+        lead.country || "",
         lead.state || "",
         lead.city || "",
-        lead.businessName,
-        lead.ownerName || "N/A",
+        lead.businessName || lead.name || "",
+        lead.ownerName || "", // Real registry data only
         lead.phone || "",
         lead.website || "",
-        lead.websiteStatus || "",
-        lead.source || "Google Maps",
+        lead.websiteCheckStatus || (lead.hasWebsite ? "Has website" : "Confirmed no website"),
+        lead.websiteEvidence || "",
+        lead.sourceProvider || lead.source || "",
         lead.sourceUrl || "",
-        lead.industry,
-        lead.verified ? "Verified" : "Pending",
-        lead.scrapedAt
+        lead.socialProfile || "",
+        lead.industry || lead.category || "",
+        lead.checkedAt || new Date().toISOString()
       ]);
     }
 

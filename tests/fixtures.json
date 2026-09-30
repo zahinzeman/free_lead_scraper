@@ -1,0 +1,31 @@
+{
+  "userSupplied": true,
+  "comment": "Ground truth built by Claude on 2026-09-29. Every website below was opened and returned a live page (or a bot-protection page for the ones marked botProtected) and appeared as the business's own site in web search. expected = 'has_website' means the pipeline must NEVER label it Confirmed no website.",
+  "businesses": [
+    { "name": "Gilchrist's Bakers", "city": "Leeds", "country": "United Kingdom", "industry": "Bakeries", "website": "https://gilchristbakers.co.uk/", "expected": "has_website" },
+    { "name": "The Leeds Baker", "city": "Leeds", "country": "United Kingdom", "industry": "Bakeries", "website": "https://theleedsbaker.com/", "expected": "has_website" },
+    { "name": "Leeds Bread Co-op", "city": "Leeds", "country": "United Kingdom", "industry": "Bakeries", "website": "https://www.leedsbread.coop/", "expected": "has_website" },
+    { "name": "Greater Manchester Locksmiths", "city": "Manchester", "country": "United Kingdom", "industry": "Locksmiths", "website": "https://www.greatermanchesterlocksmiths.co.uk/", "expected": "has_website" },
+    { "name": "Manchester Locksmiths", "city": "Manchester", "country": "United Kingdom", "industry": "Locksmiths", "website": "https://locksmithsmanchester.co.uk/", "expected": "has_website" },
+    { "name": "Frantic Locksmiths of Manchester", "city": "Manchester", "country": "United Kingdom", "industry": "Locksmiths", "website": "https://www.locksmithsmanchester.org/", "expected": "has_website", "botProtected": true },
+    { "name": "Peanut Plumbing", "city": "Austin", "country": "United States", "industry": "Plumbers", "website": "https://www.peanutplumbingtx.com/", "expected": "has_website" },
+    { "name": "Austin Plumbery", "city": "Austin", "country": "United States", "industry": "Plumbers", "website": "https://www.austinplumbery.com/", "expected": "has_website" },
+    { "name": "Austin Family Plumbing", "city": "Austin", "country": "United States", "industry": "Plumbers", "website": "https://austinfamilyplumbing.com/", "expected": "has_website", "botProtected": true },
+    { "name": "McDowd Plumbing", "city": "Austin", "country": "United States", "industry": "Plumbers", "website": "https://www.mcdowdplumbing.com/", "expected": "has_website", "botProtected": true },
+    { "name": "Austin's Best Plumbing", "city": "Austin", "country": "United States", "industry": "Plumbers", "website": "https://www.austinsbestplumbing.com/", "expected": "has_website" },
+    { "name": "JustUs Plumbing Services", "city": "Round Rock", "country": "United States", "industry": "Plumbers", "website": "https://www.justusplumbingservices.com/", "expected": "has_website" },
+    { "name": "Just Us Plubing", "city": "Austin", "country": "United States", "industry": "Plumbers", "website": "https://www.justusplumbingservices.com/", "expected": "has_website", "note": "misspelled name and wrong city as in the earlier scraper run" },
+    { "name": "Portland Chiropractic Clinic", "city": "Portland", "country": "United States", "industry": "Chiropractors", "website": "https://pdxchiroclinic.com/", "expected": "has_website" },
+    { "name": "Kelsall Chiropractic Clinic", "city": "Portland", "country": "United States", "industry": "Chiropractors", "website": "https://www.kelsallchiropractic.com/", "expected": "has_website", "botProtected": true },
+    { "name": "Center for Chiropractic & Wellness", "city": "Portland", "country": "United States", "industry": "Chiropractors", "website": "https://www.center4chiropractic.com/", "expected": "has_website" },
+    { "name": "Static Electrics", "city": "Brisbane", "country": "Australia", "industry": "Electricians", "website": "https://www.staticelectrics.com.au/", "expected": "has_website" },
+    { "name": "Gimpel Electrics", "city": "Brisbane", "country": "Australia", "industry": "Electricians", "website": "https://gimpelelectrics.com.au/", "expected": "has_website" },
+    { "name": "Down To Earth Sparky", "city": "Brisbane", "country": "Australia", "industry": "Electricians", "website": "https://downtoearthsparky.com.au/", "expected": "has_website" },
+    { "name": "Dawson Electric", "city": "Brisbane", "country": "Australia", "industry": "Electricians", "website": "https://dawsonelectric.com.au/", "expected": "has_website" },
+    { "name": "DLG Electrical", "city": "Brisbane", "country": "Australia", "industry": "Electricians", "website": "https://dlgelectrical.com.au/", "expected": "has_website", "botProtected": true },
+    { "name": "In the Mix Bakery", "city": "Auckland", "country": "New Zealand", "industry": "Bakeries", "website": "https://www.inthemix.nz/", "expected": "has_website" },
+    { "name": "Sweet as Choice Bakery", "city": "Auckland", "country": "New Zealand", "industry": "Bakeries", "website": "https://sweetaschoicebakery.co.nz/", "expected": "has_website" },
+    { "name": "Country Lane Bakehouse", "city": "Auckland", "country": "New Zealand", "industry": "Bakeries", "website": "https://countrylanebakehouse.co.nz/", "expected": "has_website" },
+    { "name": "La Martins Bakery", "city": "London", "country": "United Kingdom", "industry": "Bakeries", "website": "", "expected": "no_website_tentative", "note": "Web search showed only directories (Yell, Cylex, Cake Collection, Mapcarta) and a Companies House record. Social pages not checked. Confirm by Googling before relying on it." }
+  ]
+}
