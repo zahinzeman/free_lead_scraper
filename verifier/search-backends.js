@@ -18,6 +18,7 @@
 
 const cheerio = require('cheerio');
 const rateLimiter = require('../utils/rate-limiter');
+const { ensureNetworkRouting } = require('../utils/network-routing');
 const DiskCache = require('../utils/cache');
 
 const SEARXNG_PUBLIC_INSTANCES = [
@@ -31,12 +32,13 @@ const SEARXNG_PUBLIC_INSTANCES = [
 
 const MOJEEK_URL = 'https://www.mojeek.com/search';
 
-// Alternate between Mojeek and DuckDuckGo Lite as primary engines to prevent DDG HTML blocks
-const ENGINES = ['mojeek', 'duckduckgo_lite', 'duckduckgo_html', 'searxng'];
+// DuckDuckGo HTML is the most reliable free engine; the others are fallbacks used only
+// while an engine is cooling down after a block.
+const ENGINES = ['duckduckgo_html', 'duckduckgo_lite', 'mojeek', 'searxng'];
 
 class SearchBackendManager {
   constructor() {
-    this.activeBackend = 'mojeek';
+    this.activeBackend = 'duckduckgo_html';
     this.searxngUrl = process.env.SEARXNG_URL || 'http://localhost:8080';
 
     // Per-engine state
@@ -68,6 +70,9 @@ class SearchBackendManager {
   async initialize() {
     if (this.initialized) return;
     this.initialized = true;
+
+    // Make sure DuckDuckGo is reachable on this network before any search runs.
+    await ensureNetworkRouting();
 
     // Try self-hosted SearXNG
     try {
@@ -121,7 +126,7 @@ class SearchBackendManager {
       console.log(`[SearchBackend] SearXNG unavailable — using DDG + Mojeek.`);
     }
 
-    console.log(`[SearchBackend] 🔄 Multi-engine rotation active: alternating Mojeek and DuckDuckGo Lite.`);
+    console.log(`[SearchBackend] 🔄 Search order: ${ENGINES.join(' → ')} (next engine used only while one is cooling down).`);
   }
 
   /**
@@ -237,8 +242,8 @@ class SearchBackendManager {
     const state = this.engineState[engine];
     state.consecutiveBlocks = 0;
     state.successfulQueries++;
-    // Requirement 1: Rotate engine on every query to alternate Mojeek and DDG Lite
-    this.currentEngineIdx = (this.currentEngineIdx + 1) % ENGINES.length;
+    // Stay on an engine while it keeps working; rotation happens only on a block.
+    this.activeBackend = engine;
   }
 
   /**
@@ -248,11 +253,11 @@ class SearchBackendManager {
    * @returns {Promise<{ results, blocked, reason?, fromCache?, engine? }>}
    */
   async search(query, preferredMethod = null) {
-    const SEARCH_TIMEOUT_MS = 20000;
+    const SEARCH_TIMEOUT_MS = 50000;
     let timer;
     const timeoutPromise = new Promise(resolve => {
       timer = setTimeout(() => {
-        resolve({ results: [], blocked: true, reason: 'search query timed out after 20s' });
+        resolve({ results: [], blocked: true, reason: 'search query timed out after 50s' });
       }, SEARCH_TIMEOUT_MS);
     });
 
@@ -275,9 +280,9 @@ class SearchBackendManager {
       return { results: cached, blocked: false, fromCache: true };
     }
 
-    const engineToUse = preferredMethod && ENGINES.includes(preferredMethod)
-      ? preferredMethod
-      : await this._pickEngine();
+    const preferredAvailable = preferredMethod && ENGINES.includes(preferredMethod)
+      && Date.now() >= this.engineState[preferredMethod].coolDownUntil;
+    const engineToUse = preferredAvailable ? preferredMethod : await this._pickEngine();
 
     if (!engineToUse) {
       const anyInCooldown = ENGINES.some(e => Date.now() < this.engineState[e].coolDownUntil);
@@ -322,7 +327,7 @@ class SearchBackendManager {
       this._recordBlock(engineToUse, result.reason || 'blocked');
 
       // Try one automatic fallback to a different engine (if available and not preferred)
-      if (!preferredMethod) {
+      {
         const fallbackEngine = await this._pickEngine();
         if (fallbackEngine && fallbackEngine !== engineToUse) {
           console.log(`[SearchBackend] Falling back from ${engineToUse} to ${fallbackEngine}`);

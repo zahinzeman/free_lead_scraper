@@ -64,7 +64,11 @@ const GENERIC_CATEGORY_WORDS = new Set([
   'detail', 'detailing', 'carwash', 'wash',
   'event', 'events', 'planner', 'planners', 'planning', 'wedding', 'weddings',
   'interior', 'design', 'designer', 'designers',
-  'shop', 'shops', 'store', 'stores', 'cafe', 'restaurant', 'bar', 'food'
+  'shop', 'shops', 'store', 'stores', 'cafe', 'restaurant', 'bar', 'food',
+  // Shop types that describe the business rather than name it
+  'deli', 'delicatessen', 'catering', 'caterers', 'coffee', 'espresso', 'kitchen', 'bakehouse',
+  'confectionery', 'confectioner', 'chocolatier', 'boulangerie', 'bakkerij', 'bageri', 'konditori',
+  'electric', 'electrics', 'services', 'service', 'contractor', 'contractors', 'solutions'
 ]);
 
 const DIRECTORY_TITLE_PATTERNS = [
@@ -274,18 +278,59 @@ function textContainsToken(text, token) {
 }
 
 /**
+ * True when the business's phone number appears on the page. Compares the last 9 digits so
+ * "+1 281-502-2062" matches "(281) 502-2062" and "+44 20 7437 8898" matches "020 7437 8898"
+ * (country codes and trunk 0s differ between records and websites).
+ */
+function pageHasPhone(html, businessPhone) {
+  const nsn = nationalNumber(businessPhone);
+  if (!html || nsn.length < 7) return false;
+  return cleanPhone(html).includes(nsn);
+}
+
+/**
+ * National significant number: drops the country code and trunk 0, so
+ * "+46 8 641 91 11" -> "86419111" matches "08 – 641 91 11" on a Swedish site, and
+ * "+1 281-502-2062" -> "2815022062" matches "(281) 502-2062".
+ */
+function nationalNumber(phone) {
+  let d = cleanPhone(phone);
+  if (!d) return '';
+  if (d.startsWith('00')) d = d.slice(2);
+  const hadPlus = /^\s*\+/.test(String(phone)) || cleanPhone(phone).startsWith('00');
+  const codes = ['353', '44', '61', '64', '46', '31', '1'];
+  if (hadPlus || d.length > 10) {
+    for (const cc of codes) {
+      if (d.startsWith(cc) && d.length - cc.length >= 7) { d = d.slice(cc.length); break; }
+    }
+  } else if (d.length === 11 && d.startsWith('1')) {
+    d = d.slice(1); // US numbers stored as 1XXXXXXXXXX without "+"
+  }
+  return d.replace(/^0+/, '');
+}
+
+/** Levenshtein distance, used only for one-letter spelling slips in brand names. */
+function editDistance(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return 99;
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+/**
  * Check for corroborating second signals on candidate page (city + category, postcode, phone, domain slug)
  */
 function checkSecondSignals({ html, pageTitle, businessCity, businessPostcode, businessPhone, isSlugMatch, isGuessedDomain, hostname }) {
   const signals = [];
 
   // 1. Phone match
-  const targetPhone = cleanPhone(businessPhone);
-  if (targetPhone && targetPhone.length >= 7) {
-    const rawDigits = cleanPhone(html);
-    if (rawDigits.includes(targetPhone)) {
-      signals.push('phone match');
-    }
+  if (pageHasPhone(html, businessPhone)) {
+    signals.push('phone match');
   }
 
   // 2. Postcode match
@@ -300,7 +345,9 @@ function checkSecondSignals({ html, pageTitle, businessCity, businessPostcode, b
   // 3. City match + Category match (with nearby metro tolerance)
   if (businessCity && businessCity.length >= 3) {
     const cleanCity = businessCity.toLowerCase().trim();
-    const cityCandidates = [cleanCity, ...(METRO_AREAS[cleanCity] || [])];
+    // Region lists use names like "Dublin City" / "Auckland City"; sites just say "Dublin".
+    const baseCity = cleanCity.replace(/\s+city$/, '').replace(/^city of\s+/, '').trim();
+    const cityCandidates = [...new Set([cleanCity, baseCity, ...(METRO_AREAS[cleanCity] || []), ...(METRO_AREAS[baseCity] || [])])].filter(c => c.length >= 3);
     const cityPresent = cityCandidates.some(c => textContainsToken(pageTitle, c) || textContainsToken(html, c));
 
     if (cityPresent) {
@@ -477,6 +524,25 @@ async function inspectCandidateWebsite(rawUrl, businessName, businessCity = '', 
 
   // 6. Token-based Name Extraction
   const { allTokens, distinctiveTokens, genericTokens, localityTokens, brandTokens } = extractBusinessTokens(businessName, businessCity);
+
+  // 6b. Strong contact match: the business's own phone number is on this page and the domain
+  // is the business name give or take one letter (map "Gunnarssons" vs gunnarsons.se).
+  {
+    const { domainBase: fuzzyBase } = getRegistrableDomain(hostname);
+    const base = (fuzzyBase || '').replace(/[^a-z0-9]/g, '');
+    const nameGlued = (brandTokens.length ? brandTokens : distinctiveTokens).join('');
+    const nearName = base.length >= 5 && (brandTokens.length ? brandTokens : distinctiveTokens)
+      .some(t => t.length >= 5 && (base.includes(t) || editDistance(t, base) <= 1)) ||
+      (nameGlued.length >= 5 && editDistance(nameGlued, base) <= 1);
+    if (nearName && pageHasPhone(html, businessPhone)) {
+      return {
+        isMatch: true,
+        reason: `business phone number is on the page and the domain matches the name (${hostname})`,
+        matchedUrl: finalUrl,
+        title: pageTitle
+      };
+    }
+  }
   if (allTokens.length === 0) {
     return { isMatch: false, reason: 'Business name has no valid tokens', title: pageTitle };
   }
@@ -611,9 +677,11 @@ async function inspectCandidateWebsite(rawUrl, businessName, businessCity = '', 
   const targetPostcode = businessPostcode ? businessPostcode.toLowerCase().replace(/\s+/g, '') : '';
   const pageRawPhone = cleanPhone(html);
   const pageRawHtml = html.toLowerCase().replace(/\s+/g, '');
-  const hasContactProof = (targetPhone && targetPhone.length >= 7 && pageRawPhone.includes(targetPhone)) ||
+  const hasContactProof = pageHasPhone(html, businessPhone) ||
                           (targetPostcode && targetPostcode.length >= 3 && pageRawHtml.includes(targetPostcode));
-  if (pathDepth > 1 && !hasContactProof) {
+  // Deep pages on a domain that carries the business's own name (marcolini.co.uk/en/shops/...)
+  // are still its own site; the depth rule is only for pages on other people's domains.
+  if (pathDepth > 1 && !hasContactProof && !domainContainsNameToken) {
     return {
       isMatch: false,
       reason: `URL path depth > 1 ('${parsedUrl.pathname}') without primary contact address/phone proof; ${firstPartyLog}`,

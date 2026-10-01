@@ -5,6 +5,14 @@
  */
 
 const duckdb = require('duckdb');
+
+let sharedDb = null;
+function getSharedDb() {
+  if (!sharedDb) sharedDb = new duckdb.Database(':memory:');
+  return sharedDb;
+}
+const SHARED_DB_SETUP = "INSTALL httpfs; LOAD httpfs; SET s3_region='us-west-2'; " +
+  "SET enable_http_metadata_cache=true; SET enable_object_cache=true; SET threads=16;";
 const DiskCache = require('../utils/cache');
 const osmProvider = require('./osm-provider');
 const { isClosedBusiness } = require('../utils/normalizer');
@@ -55,9 +63,9 @@ class OvertureProvider {
     this.lastLocalityRejections = [];
     this.lastLocalityAccepted = [];
     const { country, state, city, industry, quota } = criteria;
-    const cacheKey = (quota && quota < 500)
-      ? `overture_candidates:${country}:${state}:${city}:${industry}:${quota}`
-      : `overture_candidates_all:${country}:${state}:${city}:${industry}`;
+    // The query always returns every match in the city (LIMIT 5000), so the cache must not
+    // depend on the quota; otherwise each quota choice repeats a 2-minute download.
+    const cacheKey = `overture_candidates_all:${country}:${state}:${city}:${industry}`;
     const cached = DiskCache.get('overture_candidates', cacheKey);
     if (cached) return cached;
 
@@ -101,14 +109,17 @@ class OvertureProvider {
       const timeoutId = setTimeout(() => {
         if (!isResolved) {
           isResolved = true;
-          console.warn('[Overture] DuckDB query timed out after 45s. Returning empty.');
+          console.warn('[Overture] DuckDB query timed out after 300s. Returning empty.');
           resolve([]);
         }
-      }, 45000);
+      }, 300000); // full-detail city queries take ~2 minutes on slower connections (Houston: 123s)
 
-      const db = new duckdb.Database(':memory:');
-      
-      db.all("INSTALL httpfs; LOAD httpfs; SET s3_region='us-west-2';", (setupErr) => {
+      // One shared DuckDB instance with HTTP metadata caching: the first query reads the
+      // Parquet file footers from S3, later queries reuse them (Houston 26s, Dallas 7s
+      // instead of timing out).
+      const db = getSharedDb();
+
+      db.all(SHARED_DB_SETUP, (setupErr) => {
         if (setupErr) {
           clearTimeout(timeoutId);
           if (isResolved) return;
@@ -178,7 +189,7 @@ class OvertureProvider {
           }
 
           if (candidates.length > 0) {
-            DiskCache.set('overture_candidates', cacheKey, candidates, 24 * 60 * 60 * 1000);
+            DiskCache.set('overture_candidates', cacheKey, candidates, 7 * 24 * 60 * 60 * 1000);
           }
           resolve(candidates);
         });

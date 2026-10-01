@@ -6,7 +6,22 @@ const dns = require('dns');
 const { promisify } = require('util');
 const dnsLookup = promisify(dns.lookup);
 
+// undici (Node's fetch engine, 7.29/7.30) can throw `assert(!this.paused)` from a socket
+// event when a remote server closes a connection mid-response. It is thrown outside any
+// request, so without this guard one flaky website crashes the whole server and ends every
+// running search. The affected request simply times out and that lead is marked Uncertain.
+process.on('uncaughtException', (err) => {
+  const isUndiciSocketBug = err && err.code === 'ERR_ASSERTION' && /client-h1|undici/.test(String(err.stack || ''));
+  if (isUndiciSocketBug) {
+    console.warn('[Server] Ignored undici socket assertion (remote server closed connection early).');
+    return;
+  }
+  console.error('[Server] Uncaught exception:', err);
+  process.exit(1);
+});
+
 const providerRegistry = require('./providers/registry');
+const ScraperEngine = require('./scraper-engine');
 const websiteVerifier = require('./verifier/index');
 const searchBackendManager = require('./verifier/search-backends');
 const { isParkedDomain } = require('./verifier/content-matcher');
@@ -249,6 +264,31 @@ app.get('/api/verify-url', async (req, res) => {
 });
 
 /**
+ * Turn the dashboard's country + state/region code (+ optional city) into a list of
+ * { state, city } place names that the geocoder can resolve.
+ * - A specific city is used as-is.
+ * - A specific region code searches that region's main cities.
+ * - "ALL" (countrywide) searches the main city of every region.
+ */
+function resolveSearchTargets(country, stateCode, city) {
+  const region = ScraperEngine.REGION_DATA[country];
+  const states = region ? region.states.filter(s => s.code !== 'ALL') : [];
+  const stateObj = states.find(s => s.code === stateCode || s.name === stateCode);
+
+  if (city) {
+    return [{ state: stateObj ? stateObj.name : '', city }];
+  }
+  if (stateObj) {
+    const cities = (stateObj.cities && stateObj.cities.length) ? stateObj.cities : [stateObj.name];
+    return cities.map(c => ({ state: stateObj.name, city: c }));
+  }
+  if (states.length) {
+    return states.map(s => ({ state: s.name, city: (s.cities && s.cities[0]) || s.name }));
+  }
+  return [{ state: stateCode || '', city: stateCode || country }];
+}
+
+/**
  * Real-time Lead Scraping & Verification Streaming Endpoint (SSE)
  * GET /api/stream-scrape
  */
@@ -292,78 +332,117 @@ app.get('/api/stream-scrape', async (req, res) => {
   };
 
   const targetQuota = Math.min(parseInt(quota, 10) || 100, 5000);
-  const criteria = {
-    country,
-    state,
-    city: city || state,
-    industry,
-    quota: targetQuota
-  };
+  // Most businesses in open map data already have a website, so discovery must pull
+  // far more candidates than the number of no-website leads requested.
+  const discoveryQuota = Math.min(Math.max(targetQuota * 10, 200), 500);
 
-  sendEvent('log', { message: `🚀 Initializing extraction pipeline for ${industry} in ${city || state}, ${country}...` });
+  // The dashboard sends a state/region CODE (e.g. "GL", "NH", or "ALL"). Resolve it to
+  // real place names, otherwise geocoding "GL, GL, United Kingdom" finds nothing.
+  const targets = resolveSearchTargets(country, state, city);
+
+  // Keep the connection alive during long verification steps.
+  const heartbeat = setInterval(() => {
+    if (!isClientClosed) res.write(': ping\n\n');
+  }, 15000);
+  req.on('close', () => clearInterval(heartbeat));
+
+  sendEvent('log', { message: `🚀 Initializing extraction pipeline for ${industry} in ${targets.map(t => t.city).join(', ')}, ${country}...` });
   sendEvent('log', { message: `⚙️ Data Source: ${primarySource} | Verification Engine: ${verificationMethod}` });
 
   try {
-    // 3. Fetch candidates from Primary Provider
-    const sourceCandidates = await providerRegistry.fetchCandidates(
-      primarySource,
-      criteria,
-      (prog) => {
-        sendEvent('source_count', prog);
-        sendEvent('log', { message: `📡 [${prog.source}] Found ${prog.count} real business candidates` });
-      }
-    );
-
-    let candidates = sourceCandidates || [];
-
-    // Fallback if primary returned 0 and fallback is selected
-    if (candidates.length === 0 && fallbackSource && providerRegistry.isValidProvider(fallbackSource)) {
-      sendEvent('log', { message: `⚠️ Primary source returned 0 candidates. Falling back to ${fallbackSource}...` });
-      candidates = await providerRegistry.fetchCandidates(
-        fallbackSource,
-        criteria,
-        (prog) => {
-          sendEvent('source_count', prog);
-          sendEvent('log', { message: `📡 [${prog.source} (Fallback)] Found ${prog.count} real business candidates` });
-        }
-      );
-    }
-
-    if (candidates.length === 0) {
-      sendEvent('log', { message: `ℹ️ No candidate businesses discovered for current search criteria. Real datasets return fewer results when coverage is sparse.` });
-      sendEvent('complete', { totalFound: 0, confirmedNoWebsite: 0, hasWebsite: 0, uncertain: 0 });
-      return res.end();
-    }
-
-    // 4. Apply Deduplication & Real Chain Filter
-    const dedupedCandidates = dedupeLeads(candidates);
-    let eligibleCandidates = dedupedCandidates;
-
-    if (excludeChains === 'true') {
-      const { filteredLeads, chainExcludedCount } = applyRealChainFilter(dedupedCandidates, 2);
-      eligibleCandidates = filteredLeads;
-      if (chainExcludedCount > 0) {
-        sendEvent('log', { message: `🛡️ Local Chain Filter: Excluded ${chainExcludedCount} businesses with > 2 locations or on corporate blocklist.` });
-      }
-    }
-
-    sendEvent('log', { message: `🔍 Beginning multi-layer website verification on ${eligibleCandidates.length} real candidates (Quota cap: ${targetQuota})...` });
-
     let confirmedNoWebsiteCount = 0;
     let noWebsiteSocialOnlyCount = 0;
     let hasWebsiteCount = 0;
     let uncertainCount = 0;
     let verifiedCount = 0;
+    let hiddenNoPhoneCount = 0;
+    let deliveredNoWebsiteCount = 0;
+    let totalDiscovered = 0;
+    let eligibleTotal = 0;
+    const seenKeys = new Set();
+    // Same business found again in a neighbouring city: match on phone, else name + street.
+    const leadKey = (c) => cleanPhone(c.phone || '') || (String(c.name || '').toLowerCase().trim() + '|' + String(c.address || '').toLowerCase().slice(0, 30));
+    const quotaReached = () => websiteFilter === 'no_website' && deliveredNoWebsiteCount >= targetQuota;
+    const progressPayload = () => ({
+      current: verifiedCount,
+      total: eligibleTotal,
+      percentage: websiteFilter === 'no_website'
+        ? Math.min(100, (deliveredNoWebsiteCount / targetQuota) * 100)
+        : Math.min(100, eligibleTotal ? (verifiedCount / eligibleTotal) * 100 : 0),
+      confirmedNoWebsite: confirmedNoWebsiteCount,
+      noWebsiteSocialOnly: noWebsiteSocialOnlyCount,
+      hasWebsite: hasWebsiteCount,
+      uncertain: uncertainCount
+    });
+
+    // 3-5. Discover and verify one city at a time, so leads appear quickly and the run
+    // stops as soon as the quota is met.
+    for (const target of targets) {
+      if (isClientClosed || quotaReached()) break;
+      const criteria = { country, state: target.state, city: target.city, industry, quota: discoveryQuota };
+      sendEvent('log', { message: `🗺️ Searching ${industry} in ${target.city}${target.state ? ', ' + target.state : ''}...` });
+
+      let found = await providerRegistry.fetchCandidates(
+        primarySource,
+        criteria,
+        (prog) => {
+          sendEvent('source_count', prog);
+          sendEvent('log', { message: `📡 [${prog.source}] ${target.city}: found ${prog.count} real business candidates` });
+        }
+      );
+
+      // Fallback if primary returned 0 and fallback is selected
+      if ((!found || found.length === 0) && fallbackSource && providerRegistry.isValidProvider(fallbackSource)) {
+        sendEvent('log', { message: `⚠️ Primary source returned 0 candidates for ${target.city}. Falling back to ${fallbackSource}...` });
+        found = await providerRegistry.fetchCandidates(
+          fallbackSource,
+          criteria,
+          (prog) => {
+            sendEvent('source_count', prog);
+            sendEvent('log', { message: `📡 [${prog.source} (Fallback)] ${target.city}: found ${prog.count} real business candidates` });
+          }
+        );
+      }
+
+      // 4. Deduplicate (also against earlier cities) & apply the real chain filter
+      const fresh = dedupeLeads(found || []).filter(c => {
+        const k = leadKey(c);
+        if (seenKeys.has(k)) return false;
+        seenKeys.add(k);
+        return true;
+      });
+      totalDiscovered += fresh.length;
+      if (fresh.length === 0) continue;
+
+      let eligibleCandidates = fresh;
+      if (excludeChains === 'true') {
+        const { filteredLeads, chainExcludedCount } = applyRealChainFilter(fresh, 2);
+        eligibleCandidates = filteredLeads;
+        if (chainExcludedCount > 0) {
+          sendEvent('log', { message: `🛡️ Local Chain Filter (${target.city}): Excluded ${chainExcludedCount} businesses with > 2 locations or on corporate blocklist.` });
+        }
+      }
+      eligibleTotal += eligibleCandidates.length;
+      sendEvent('log', { message: `🔍 Verifying websites for ${eligibleCandidates.length} businesses in ${target.city}...` });
 
     // 5. Verification Waterfall Loop
     for (const candidate of eligibleCandidates) {
       if (isClientClosed) break;
-      if (confirmedNoWebsiteCount >= targetQuota && websiteFilter === 'no_website') break;
+      if (quotaReached()) break;
 
       verifiedCount++;
 
       // Execute full 6-stage verification
       const verifyResult = await websiteVerifier.verifyLead(candidate, verificationMethod);
+
+      // Variants such as "Uncertain (search blocked)" are all Uncertain for the dashboard,
+      // tabs and exports; the specific reason stays in uncertainReason and the evidence.
+      let uncertainReason = '';
+      if (typeof verifyResult.websiteCheckStatus === 'string' && verifyResult.websiteCheckStatus.startsWith('Uncertain')) {
+        const m = verifyResult.websiteCheckStatus.match(/\((.*)\)/);
+        uncertainReason = m ? m[1] : '';
+        verifyResult.websiteCheckStatus = 'Uncertain';
+      }
 
       const enrichedLead = {
         id: candidate.placeId,
@@ -379,11 +458,14 @@ app.get('/api/stream-scrape', async (req, res) => {
         hasPhone: Boolean(candidate.phone),
         category: candidate.category,
         industry: candidate.category,
-        website: verifyResult.websiteUrl || candidate.website || '',
+        // Only a verified website goes in the Website column. A dead or rejected URL from the
+        // map record (e.g. an expired domain) stays in the evidence text instead.
+        website: verifyResult.websiteCheckStatus === 'Has website' ? (verifyResult.websiteUrl || candidate.website || '') : '',
         hasWebsite: verifyResult.websiteCheckStatus === 'Has website',
         websiteStatus: verifyResult.websiteCheckStatus === 'Has website' ? 'Working Website (Live)' : verifyResult.websiteCheckStatus,
         websiteCheckStatus: verifyResult.websiteCheckStatus,
         websiteEvidence: verifyResult.websiteEvidence,
+        uncertainReason,
         socialProfile: verifyResult.socialProfile || candidate.socialProfile || '',
         sourceProvider: candidate.sourceProvider,
         source: candidate.sourceProvider,
@@ -406,7 +488,9 @@ app.get('/api/stream-scrape', async (req, res) => {
 
       // Check contact filters
       if (includePhones === 'true' && !candidate.phone) {
-        // Skip emitting if phone required and absent
+        // Skip emitting if phone required and absent, but still report progress
+        hiddenNoPhoneCount++;
+        sendEvent('progress', progressPayload());
         continue;
       }
 
@@ -427,17 +511,21 @@ app.get('/api/stream-scrape', async (req, res) => {
 
       if (shouldEmit) {
         sendEvent('lead', enrichedLead);
+        if (enrichedLead.websiteCheckStatus === 'Confirmed no website' || enrichedLead.websiteCheckStatus === 'No website found (social only, bio unread)') {
+          deliveredNoWebsiteCount++;
+        }
       }
 
-      sendEvent('progress', {
-        current: verifiedCount,
-        total: eligibleCandidates.length,
-        percentage: Math.min(100, (verifiedCount / eligibleCandidates.length) * 100),
-        confirmedNoWebsite: confirmedNoWebsiteCount,
-        noWebsiteSocialOnly: noWebsiteSocialOnlyCount,
-        hasWebsite: hasWebsiteCount,
-        uncertain: uncertainCount
-      });
+      sendEvent('progress', progressPayload());
+    }
+    } // end per-city loop
+
+    if (totalDiscovered === 0) {
+      sendEvent('log', { message: `ℹ️ No candidate businesses discovered for ${industry} in ${targets.map(t => t.city).join(', ')}. Try another city or industry; open map data is thinner in some places.` });
+    }
+
+    if (hiddenNoPhoneCount > 0) {
+      sendEvent('log', { message: `📵 ${hiddenNoPhoneCount} leads were hidden because they have no phone number ("Must Have Phone Number" is on).` });
     }
 
     sendEvent('log', {
@@ -452,10 +540,12 @@ app.get('/api/stream-scrape', async (req, res) => {
       uncertain: uncertainCount
     });
 
+    clearInterval(heartbeat);
     res.end();
   } catch (err) {
     console.error('[SSE Stream Error]', err);
     sendEvent('error', { message: `Pipeline error: ${err.message}` });
+    clearInterval(heartbeat);
     res.end();
   }
 });

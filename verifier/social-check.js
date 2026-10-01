@@ -9,7 +9,7 @@
 const cheerio = require('cheerio');
 const rateLimiter = require('../utils/rate-limiter');
 const { isBlockedDomain } = require('./blocklist');
-const { inspectCandidateWebsite } = require('./content-matcher');
+const { inspectCandidateWebsite, extractBusinessTokens } = require('./content-matcher');
 const searchBackendManager = require('./search-backends');
 
 const LOGIN_WALL_PATTERNS = [
@@ -88,6 +88,22 @@ function generateFacebookVariants(rawUrl) {
  * @param {string} city 
  * @returns {Promise<string|null>}
  */
+/**
+ * Does a social page belong to this business? The handle must carry the leading brand
+ * word (4+ letters) or every distinctive name word; failing that, the result title must
+ * contain every distinctive word.
+ */
+function socialNameMatches(handleText, title, businessName) {
+  const { distinctiveTokens } = extractBusinessTokens(businessName);
+  if (!distinctiveTokens || distinctiveTokens.length === 0) return false;
+  const handle = String(handleText || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const inHandle = (t) => handle.includes(t) || (t.length > 4 && t.endsWith('s') && handle.includes(t.slice(0, -1)));
+  const lead = distinctiveTokens[0];
+  if (handle && ((lead.length >= 4 && inHandle(lead)) || distinctiveTokens.every(inHandle))) return true;
+  const t = String(title || '').toLowerCase().replace(/['’]/g, '');
+  return distinctiveTokens.every(tok => t.includes(tok));
+}
+
 async function searchFacebookProfile(businessName, city) {
   try {
     const query = `"${businessName}" "${city}" facebook`.trim();
@@ -104,8 +120,13 @@ async function searchFacebookProfile(businessName, city) {
           const segments = parsed.pathname.split('/').filter(Boolean);
           if (segments.length > 0) {
             const h = segments[0].toLowerCase();
-            if (!['login', 'sharer', 'help', 'recover', 'events', 'places', 'watch'].includes(h)) {
-              return url;
+            if (!['login', 'sharer', 'help', 'recover', 'events', 'places', 'watch', 'people', 'groups', 'p'].includes(h) || h === 'p' || h === 'people') {
+              // Only accept a page that is recognisably this business: its handle (or, for
+              // /p/ and /people/ URLs, the result title) must carry the business's name.
+              const handleText = (h === 'p' || h === 'people') ? (segments[1] || '') : h;
+              if (socialNameMatches(handleText, item.title || '', businessName)) {
+                return url;
+              }
             }
           }
         } catch (e) {}

@@ -100,7 +100,7 @@ class RateLimiter {
         attempt++;
         try {
           const controller = new AbortController();
-          const timeoutMs = Math.min(options.timeoutMs || 10000, 20000);
+          const timeoutMs = Math.min(options.timeoutMs || 10000, 60000);
           const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
           const defaultHeaders = {

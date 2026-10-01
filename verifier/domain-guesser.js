@@ -51,6 +51,22 @@ const GENERIC_HANDLE_WORDS = new Set([
  * e.g. https://www.facebook.com/justusplumbingservices/ -> "justusplumbingservices"
  * Rejects posts, photos, videos, stories, reels, groups, and events.
  */
+/**
+ * True when the page title/h1 carries this business's own name, i.e. every distinctive
+ * word of the name appears in it (e.g. "Chinatown Bakery | Chinese Breads & Cakes").
+ * Used to stop a same-named site from being treated as proof of a different business.
+ */
+function pageNamesBusiness(pageText, businessName) {
+  if (!pageText || !businessName) return false;
+  const { distinctiveTokens, allTokens } = extractBusinessTokens(businessName);
+  const required = (distinctiveTokens && distinctiveTokens.length) ? distinctiveTokens : (allTokens || []);
+  if (!required.length) return false;
+  const text = pageText.toLowerCase().replace(/['’]/g, '').replace(/[^\w\s]/g, ' ');
+  const words = new Set(text.split(/\s+/).filter(Boolean));
+  const squashed = text.replace(/\s+/g, '');
+  return required.every(t => words.has(t) || squashed.includes(t));
+}
+
 function extractSocialHandle(socialUrl) {
   if (!socialUrl || typeof socialUrl !== 'string') return null;
   try {
@@ -103,6 +119,39 @@ function generateDomainCandidates(businessName, city = '', country = 'United Sta
   if (!baseSlug || baseSlug.length < 3) return [];
 
   const slugs = new Set([baseSlug]);
+
+  // Core-name variants, tried first. Map listings often append a description to the name
+  // ("Treasure Homes Designs - Plumbing services", "Joe's | Bakery & Cafe") while the website
+  // uses just the brand (treasurehomesdesigns.com).
+  const coreName = businessName.split(/\s[-–|:]\s|\s\(|,/)[0];
+  const coreSlug = extractSlug(coreName);
+  if (coreSlug && coreSlug.length >= 4) slugs.add(coreSlug);
+  const TRAILING_TRADE_WORDS = /(\s+(and|&)?\s*(plumbing|plumbers?|electrical|electricians?|electric|services?|solutions|contractors?|company|co|ltd|llc|inc|pty|limited|group|bakery|bakers?|patisserie|cafe|locksmiths?|heating|cooling|air|hvac|repairs?))+$/i;
+  const strippedName = coreName.toLowerCase().replace(/[^a-z0-9&\s]/g, ' ').replace(/\s+/g, ' ').trim().replace(TRAILING_TRADE_WORDS, '');
+  const strippedSlug = extractSlug(strippedName);
+  const weakSlugs = new Set();
+
+  // Brand part before the first trade word, with "&" spelled out as websites usually do:
+  // "NS & Co Electrical & Signage Services" -> nsandco / nsco.
+  const TRADE_WORD = /^(plumbing|plumbers?|electrical|electricians?|electric|services?|solutions|contractors?|bakery|bakers?|bakehouse|patisserie|cafe|locksmiths?|heating|cooling|air|hvac|repairs?|construction|builders?|landscaping|cleaning|pest|signage)$/i;
+  const coreWords = coreName.toLowerCase().replace(/[^a-z0-9&\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const leadIdx = coreWords.findIndex(w => TRADE_WORD.test(w));
+  const leadWords = leadIdx > 0 ? coreWords.slice(0, leadIdx) : [];
+  if (leadWords.length && leadWords.length < coreWords.length) {
+    const withAnd = leadWords.map(w => (w === '&' ? 'and' : w)).join('');
+    const withoutAnd = leadWords.filter(w => w !== '&').join('');
+    for (const v of [withAnd, withoutAnd]) {
+      if (v.length >= 5 && !slugs.has(v)) { slugs.add(v); weakSlugs.add(v); }
+    }
+  }
+  if (coreName.includes('&')) {
+    const andSlug = extractSlug(coreName.replace(/&/g, ' and '));
+    if (andSlug && andSlug.length >= 5 && !slugs.has(andSlug)) slugs.add(andSlug);
+  }
+  if (strippedSlug && strippedSlug.length >= 5 && strippedSlug !== coreSlug && !slugs.has(strippedSlug)) {
+    slugs.add(strippedSlug);
+    weakSlugs.add(strippedSlug); // shorter brand-only guess: may belong to another business
+  }
 
   // If business starts with "the ", add variant without "the", and vice versa
   if (rawClean.startsWith('the ')) {
@@ -222,8 +271,12 @@ function generateDomainCandidates(businessName, city = '', country = 'United Sta
     }
   }
 
-  // Return up to 24 prioritized candidates
-  return Array.from(candidates).slice(0, 24);
+  // Return up to 24 prioritized candidates. Candidates built from the trimmed brand-only slug
+  // are "weak": they count when their page matches, but an unreadable page there is not
+  // evidence that this business has a website.
+  const result = Array.from(candidates).slice(0, 24);
+  result.weak = new Set(result.filter(d => [...weakSlugs].some(w => d.startsWith(w + '.') || d.startsWith(w + '-') || d.startsWith(w + citySlug))));
+  return result;
 }
 
 /**
@@ -397,8 +450,37 @@ async function _playwrightFetchInternal(url) {
  * @param {string} socialProfile
  * @returns {Promise<{ found: boolean, resolvingCandidateDomainFound: boolean, domain?: string, url?: string, evidence: string, domainEvidence: object[] }>}
  */
+/**
+ * Brand-name match for short/abbreviated brands that the token matcher ignores
+ * (e.g. "NS & Co" whose words are 2 letters). True only when ALL hold:
+ *  - the guessed domain's name part is exactly the brand before the first trade word
+ *    (nsandco / nsco), and
+ *  - the page title contains that brand phrase, and
+ *  - the page title or h1 contains a trade/category word.
+ */
+function brandDomainTitleMatch(domain, businessName, title, h1) {
+  if (!title) return false;
+  const TRADE = /^(plumbing|plumbers?|electrical|electricians?|electric|services?|solutions|contractors?|bakery|bakers?|bakehouse|patisserie|cafe|locksmiths?|heating|cooling|air|hvac|repairs?|construction|builders?|landscaping|cleaning|pest|signage)$/i;
+  const core = businessName.split(/\s[-–|:]\s|\s\(|,/)[0].toLowerCase().replace(/[^a-z0-9&\s]/g, ' ');
+  const words = core.split(/\s+/).filter(Boolean);
+  const idx = words.findIndex(w => TRADE.test(w));
+  if (idx <= 0) return false;
+  const lead = words.slice(0, idx);
+  const slugAnd = lead.map(w => (w === '&' ? 'and' : w)).join('');
+  const slugNoAnd = lead.filter(w => w !== '&').join('');
+  const label = domain.toLowerCase().split('.')[0];
+  if (label !== slugAnd && label !== slugNoAnd) return false;
+  const norm = (t) => ' ' + String(t || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+  const phrase = norm(lead.join(' '));
+  const pageText = norm(title) + norm(h1);
+  if (!pageText.includes(phrase)) return false;
+  const tradeInPage = /(plumb|electric|bak|patisser|locksmith|heating|cooling|hvac|builder|construct|landscap|clean|pest|sign|repair|cafe)/i.test(title + ' ' + (h1 || ''));
+  return tradeInPage;
+}
+
 async function checkGuessedDomains(businessName, city = '', country = 'United States', phone = '', socialProfile = '') {
   const candidates = generateDomainCandidates(businessName, city, country, socialProfile);
+  const weakDomains = candidates.weak || new Set();
   if (candidates.length === 0) {
     return {
       found: false,
@@ -494,7 +576,7 @@ async function checkGuessedDomains(businessName, city = '', country = 'United St
         // Per Item 1: CANNOT be "confirmed no website" — must be "Uncertain: candidate domain exists"
         evidenceEntry.disposition = `bot-protected (Playwright HTTP ${pw.status || 'error'})`;
         evidenceEntry.resolvingAndUnverifiable = true;
-        resolvingCandidateDomainFound = true;
+        if (!weakDomains.has(domain)) resolvingCandidateDomainFound = true;
         checkedSummary.push(`${domain} (resolves, bot-protected via Playwright HTTP ${pw.status || 'error'}: title="${pw.title}", h1="${pw.h1}")`);
         domainEvidence.push(evidenceEntry);
         continue;
@@ -503,6 +585,12 @@ async function checkGuessedDomains(businessName, city = '', country = 'United St
       // Plain HTTP worked — record the status/title from the match result
       evidenceEntry.httpStatus = matchResult.statusCode || (matchResult.error ? 0 : 200);
       evidenceEntry.title = matchResult.title || '';
+    }
+
+    if (!matchResult.isMatch && !matchResult.isParked && !matchResult.isBlocked && !matchResult.error &&
+        brandDomainTitleMatch(domain, businessName, matchResult.title || evidenceEntry.title, matchResult.h1)) {
+      matchResult.isMatch = true;
+      matchResult.reason = `domain is the brand name and page title names this brand with its trade (title="${matchResult.title || evidenceEntry.title}")`;
     }
 
     if (matchResult.isMatch) {
@@ -542,7 +630,7 @@ async function checkGuessedDomains(businessName, city = '', country = 'United St
         evidenceEntry.disposition = `unreachable: ${matchResult.error}`;
         checkedSummary.push(`${domain} (DNS alive [${dnsResult.protocol}], HTTP unreachable: ${matchResult.error})`);
         // DNS resolved but could not connect — count as resolving candidate
-        resolvingCandidateDomainFound = true;
+        if (!weakDomains.has(domain)) resolvingCandidateDomainFound = true;
       }
 
     } else {
@@ -551,13 +639,21 @@ async function checkGuessedDomains(businessName, city = '', country = 'United St
       // Per Item 1, content mismatch on a resolving domain = NOT "uncertain" — it's affirmatively the wrong business.
       // However, if the title/h1 is empty or generic (could be JS-only), we mark as uncertain.
       const hasRealContent = (evidenceEntry.title && evidenceEntry.title.length > 5);
-      if (hasRealContent) {
+      const pageText = `${matchResult.title || evidenceEntry.title || ''} ${matchResult.h1 || ''}`;
+      if (hasRealContent && pageNamesBusiness(pageText, businessName)) {
+        // The page is titled with this business's own name but the address/phone could not be
+        // confirmed. That is not proof of a different business, so it must not allow
+        // "Confirmed no website".
+        evidenceEntry.disposition = `same-name site, location unconfirmed (title="${matchResult.title || evidenceEntry.title}")`;
+        if (!weakDomains.has(domain)) resolvingCandidateDomainFound = true;
+        checkedSummary.push(`${domain} (DNS alive, page is titled with this business name but location could not be confirmed: title="${matchResult.title || evidenceEntry.title}")`);
+      } else if (hasRealContent) {
         evidenceEntry.disposition = `content-mismatch (title="${matchResult.title || evidenceEntry.title}", reason: ${matchResult.reason})`;
         checkedSummary.push(`${domain} (DNS alive, content mismatch: ${matchResult.reason || 'business tokens not found'}, title="${matchResult.title || evidenceEntry.title}")`);
         // Affirmatively wrong business — do NOT set resolvingCandidateDomainFound
       } else {
         evidenceEntry.disposition = `no-content (may be JS-only)`;
-        resolvingCandidateDomainFound = true;
+        if (!weakDomains.has(domain)) resolvingCandidateDomainFound = true;
         checkedSummary.push(`${domain} (DNS alive, no readable content — may be JS-only)`);
       }
     }

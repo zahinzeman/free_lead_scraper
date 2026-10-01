@@ -157,12 +157,18 @@ function validateLocality(candidate, requestedCity, requestedState = '', request
   const candPostcode = candidate.postcode || '';
 
   // 1. Polygon boundary check if available
-  if (boundaryPolygon && candidate.lat && candidate.lng) {
+  // Only a real area can be used; some places geocode to a single Point (e.g. Stockholm),
+  // which would otherwise reject every business as "outside the boundary".
+  const isArea = boundaryPolygon && (boundaryPolygon.type === 'Polygon' || boundaryPolygon.type === 'MultiPolygon');
+  if (isArea && candidate.lat && candidate.lng) {
     const pt = [Number(candidate.lng), Number(candidate.lat)];
     const insidePoly = isPointInPolygon(pt, boundaryPolygon);
     if (!insidePoly) {
       return { isMatch: false, reason: `Coordinates (${candidate.lat}, ${candidate.lng}) fall outside boundary polygon` };
     }
+    // Inside the real city boundary: the coordinates are authoritative. Address city names
+    // vary ("Auckland" vs "North Shore", "London" vs a borough) and must not reject it.
+    return { isMatch: true, reason: 'Coordinates inside city boundary polygon' };
   }
 
   // 2. Specific London, UK Rules

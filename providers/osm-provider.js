@@ -76,42 +76,61 @@ class OsmProvider {
    * Geocode a city/state to a bounding box [south, west, north, east] via Nominatim
    */
   async getBoundingBox(city, state, country) {
-    const qParts = [city, state, country].filter(Boolean);
-    const query = qParts.join(', ');
-    const cacheKey = `nominatim_bbox:${query}`;
+    const query = [city, state, country].filter(Boolean).join(', ');
+    const cacheKey = `nominatim_bbox_v3:${query}`;
 
     const cached = DiskCache.get('geocoding', cacheKey);
     if (cached) return cached;
 
-    try {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&polygon_geojson=1&limit=1`;
-      const res = await rateLimiter.politeFetch(url, {
-        headers: { 'User-Agent': rateLimiter.getBotUserAgent() },
-        timeoutMs: 6000
-      });
+    // "London, Greater London" resolves to the 3 km-wide City of London, and
+    // "Westminster, Greater London" to a single district. Ask both with and without the
+    // region, keep results actually named after the city (and inside the region when one
+    // is given), and use the largest such area.
+    const queries = [...new Set([query, [city, country].filter(Boolean).join(', ')])];
+    const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    const cityKey = norm(city).replace(/\b(city|town)\b/g, '').replace(/\s+/g, ' ').trim();
+    const stateKey = norm(state);
+    // Names that mean the same place: "London", "Greater London", "City of London",
+    // "Auckland City". Deliberately excludes counties ("Houston County").
+    const sameCityNames = new Set([cityKey, `greater ${cityKey}`, `city of ${cityKey}`, `${cityKey} city`]);
+    const cleanName = (s) => norm(s).replace(/\s+/g, ' ').trim();
 
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (!Array.isArray(data) || data.length === 0) return null;
-
-      const item = data[0];
-      // boundingbox: [south, north, west, east]
-      if (item.boundingbox && item.boundingbox.length === 4) {
-        const [south, north, west, east] = item.boundingbox.map(Number);
-        const bbox = {
-          south,
-          west,
-          north,
-          east,
-          polygon: item.geojson || null
-        };
-        DiskCache.set('geocoding', cacheKey, bbox, 30 * 24 * 60 * 60 * 1000);
-        return bbox;
+    const candidates = [];
+    for (const q of queries) {
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&polygon_geojson=1&limit=5`;
+        const res = await rateLimiter.politeFetch(url, {
+          headers: { 'User-Agent': rateLimiter.getBotUserAgent() },
+          timeoutMs: 8000
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (Array.isArray(data)) candidates.push(...data);
+      } catch (err) {
+        console.warn(`[OSM] Nominatim bbox lookup failed for ${q}:`, err.message);
       }
-    } catch (err) {
-      console.warn(`[OSM] Nominatim bbox lookup failed for ${query}:`, err.message);
     }
-    return null;
+
+    const toBox = (item) => {
+      if (!item.boundingbox || item.boundingbox.length !== 4) return null;
+      // boundingbox: [south, north, west, east]
+      const [south, north, west, east] = item.boundingbox.map(Number);
+      return { south, west, north, east, polygon: item.geojson || null, area: Math.abs((north - south) * (east - west)) };
+    };
+
+    const named = candidates.filter(item => {
+      const first = cleanName(String(item.display_name || '').split(',')[0]);
+      const nameMatches = sameCityNames.has(first) || sameCityNames.has(cleanName(item.name));
+      const inState = !stateKey || norm(item.display_name).includes(stateKey) || first === stateKey;
+      return nameMatches && inState;
+    });
+
+    const pool = (named.length ? named : candidates.slice(0, 1)).map(toBox).filter(Boolean);
+    if (!pool.length) return null;
+    const best = pool.sort((a, b) => b.area - a.area)[0];
+    const bbox = { south: best.south, west: best.west, north: best.north, east: best.east, polygon: best.polygon };
+    DiskCache.set('geocoding', cacheKey, bbox, 30 * 24 * 60 * 60 * 1000);
+    return bbox;
   }
 
   /**
@@ -128,11 +147,13 @@ class OsmProvider {
 
     // 1. Resolve bounding box
     const bbox = await this.getBoundingBox(city, state, country);
-    let bboxFilter = '';
-    if (bbox) {
-      // Overpass bbox format: (south,west,north,east)
-      bboxFilter = `(${bbox.south},${bbox.west},${bbox.north},${bbox.east})`;
+    if (!bbox) {
+      // Without an area the Overpass query would cover the whole planet and time out.
+      console.warn(`[OSM] Could not locate "${[city, state, country].filter(Boolean).join(', ')}" on the map; skipping OpenStreetMap for it.`);
+      return [];
     }
+    // Overpass bbox format: (south,west,north,east)
+    const bboxFilter = `(${bbox.south},${bbox.west},${bbox.north},${bbox.east})`;
 
     // 2. Build Overpass QL (Strict business tags only - no name-regex-only queries)
     const clauses = [];
@@ -156,25 +177,39 @@ class OsmProvider {
       return cached;
     }
 
-    let elements = [];
-    for (const endpoint of OVERPASS_ENDPOINTS) {
-      try {
-        const url = `${endpoint}?data=${encodeURIComponent(overpassQuery)}`;
-        const res = await rateLimiter.politeFetch(url, {
-          timeoutMs: 15000,
-          headers: { 'User-Agent': rateLimiter.getBotUserAgent() }
-        }, 1);
-
-        if (res.ok) {
-          const json = await res.json();
-          if (json && Array.isArray(json.elements)) {
-            elements = json.elements;
-            break;
-          }
-        }
-      } catch (err) {
-        console.warn(`[OSM] Overpass endpoint ${endpoint} failed:`, err.message);
+    // Public Overpass servers are often busy (429/504). Try every endpoint, then wait and
+    // try again once, instead of silently returning zero businesses.
+    let elements = null;
+    for (let pass = 1; pass <= 2 && elements === null; pass++) {
+      if (pass > 1) {
+        console.warn('[OSM] All Overpass servers busy or failing; retrying in 20s...');
+        await rateLimiter.sleep(20000);
       }
+      for (const endpoint of OVERPASS_ENDPOINTS) {
+        try {
+          const url = `${endpoint}?data=${encodeURIComponent(overpassQuery)}`;
+          const res = await rateLimiter.politeFetch(url, {
+            timeoutMs: 45000,
+            headers: { 'User-Agent': rateLimiter.getBotUserAgent() }
+          }, 1);
+
+          if (res.ok) {
+            const json = await res.json();
+            if (json && Array.isArray(json.elements)) {
+              elements = json.elements;
+              break;
+            }
+          } else {
+            console.warn(`[OSM] Overpass endpoint ${endpoint} returned HTTP ${res.status}`);
+          }
+        } catch (err) {
+          console.warn(`[OSM] Overpass endpoint ${endpoint} failed:`, err.message);
+        }
+      }
+    }
+    if (elements === null) {
+      console.warn(`[OSM] OpenStreetMap unavailable for ${city}; no candidates from this source.`);
+      elements = [];
     }
 
     this.lastRawCount = elements.length;

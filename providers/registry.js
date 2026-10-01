@@ -167,20 +167,22 @@ class ProviderRegistry {
         autoSequence.push(fsaProvider);
       }
 
-      for (const provider of autoSequence) {
+      // Run the free sources at the same time: Overture alone can take ~2 minutes per city.
+      const results = await Promise.all(autoSequence.map(async (provider) => {
         try {
           console.log(`[AutoCascade] Running candidate discovery via ${provider.name}...`);
           const sourceCandidates = await provider.fetchCandidates(criteria);
           const count = sourceCandidates ? sourceCandidates.length : 0;
           onSourceProgress({ source: provider.name, count });
           console.log(`[AutoCascade] ${provider.name} found ${count} candidates`);
-          if (count > 0) {
-            allCandidates.push(...sourceCandidates);
-          }
+          return sourceCandidates || [];
         } catch (err) {
           console.warn(`[AutoCascade] Error in ${provider.name}:`, err.message);
+          onSourceProgress({ source: provider.name, count: 0 });
+          return [];
         }
-      }
+      }));
+      for (const list of results) allCandidates.push(...list);
     } else {
       const provider = this.providers.get(providerId);
       if (!provider || typeof provider.fetchCandidates !== 'function') {

@@ -468,7 +468,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     activeEventSource.addEventListener('error', (e) => {
-      appendLog('⚠️ SSE connection closed or interrupted.', 'warning');
+      // A server-sent "error" event carries a message; a dropped connection does not.
+      let serverMessage = '';
+      try { serverMessage = e.data ? JSON.parse(e.data).message : ''; } catch (_) {}
+      if (serverMessage) {
+        appendLog(`❌ ${serverMessage}`, 'error');
+      } else {
+        appendLog('⚠️ Lost connection to the scraper server. Make sure `node server.js` is still running, then refresh the page.', 'warning');
+      }
       finishRun();
     });
   });

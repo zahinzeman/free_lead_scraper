@@ -23,6 +23,13 @@ const { inspectSocialProfiles } = require('./social-check');
 const { searchByPhone } = require('./reverse-phone');
 const searchBackendManager = require('./search-backends');
 
+// Real business directories, review and ordering platforms. A listing on one of these proves a
+// business exists (unlike Wikipedia, blogs or fan sites that merely mention a name).
+const BUSINESS_LISTING_HOSTS = /(^|\.)(yelp\.[a-z.]+|yell\.com|yellowpages\.[a-z.]+|superpages\.com|manta\.com|bbb\.org|chamberofcommerce\.(com|uk)|nextdoor\.[a-z.]+|mapquest\.com|foursquare\.com|tripadvisor\.[a-z.]+|thumbtack\.com|angi\.com|homeadvisor\.com|houzz\.[a-z.]+|bark\.com|checkatrade\.com|trustatrader\.com|ratedpeople\.com|mybuilder\.com|hotfrog\.[a-z.]+|cylex[a-z.-]*|freeindex\.co\.uk|thomsonlocal\.com|scoot\.co\.uk|192\.com|find-open\.[a-z.]+|brownbook\.net|opendi\.[a-z.]+|infobel\.com|goldenpages\.ie|goudengids\.nl|telefoonboek\.nl|hitta\.se|eniro\.se|allabolag\.se|truelocal\.com\.au|localsearch\.com\.au|hipages\.com\.au|oneflare\.com\.au|yellow\.co\.nz|finda\.co\.nz|nocowboys\.co\.nz|deliveroo\.[a-z.]+|ubereats\.com|just-eat\.[a-z.]+|justeat\.[a-z.]+|doordash\.com|grubhub\.com|thuisbezorgd\.nl|foodora\.se|menulog\.com\.au|restaurantguru\.com|opentable\.[a-z.]+|thefork\.[a-z.]+|ratings\.food\.gov\.uk|companieshouse\.gov\.uk|find-and-update\.company-information\.service\.gov\.uk)$/i;
+function safeHost(url) {
+  try { return new URL(url).hostname.replace(/^www\./, '').toLowerCase(); } catch (_) { return ''; }
+}
+
 const CLOSED_SNIPPET_PATTERNS = /\b(will close|closing|closed down|permanently closed|farewell|has closed|shut down|no longer trading|ceased trading)\b/i;
 
 /**
@@ -39,7 +46,13 @@ function isMatchingBusinessSocial(url, businessName) {
   if (['popular', 'official', 'news', 'info', 'media', 'butlerandstag', 'pages', 'community', 'places'].includes(cleanHandle)) {
     return false;
   }
-  return distinctiveTokens.some(t => cleanHandle.includes(t) || t.includes(cleanHandle));
+  // The handle must carry the business's leading brand word (4+ letters), or every
+  // distinctive word of the name. Matching any one short word let "The One 2 Vue Shop"
+  // claim facebook.com/TheOneBySineadCorcoran.
+  const inHandle = (t) => cleanHandle.includes(t) || (t.length > 4 && t.endsWith('s') && cleanHandle.includes(t.slice(0, -1)));
+  const lead = distinctiveTokens[0];
+  if (lead.length >= 4 && inHandle(lead)) return true;
+  return distinctiveTokens.every(inHandle);
 }
 
 /**
@@ -134,6 +147,7 @@ class WebsiteVerifier {
     const evidenceTrail = [];
     let searchBlockedOrFailed = false;
     let searchBlockedReason = '';
+    let directoryListingCount = 0;
     let detectedSocialProfile = candidate.socialProfile || '';
     const hasPhone = Boolean(phone && cleanPhone(phone).length >= 7);
 
@@ -180,7 +194,89 @@ class WebsiteVerifier {
             checkedAt
           };
         } else {
-          evidenceTrail.push(`Source record: URL rejected by first-party verification (${srcUrl}: ${srcMatch.reason})`);
+          // Why was the listed website rejected? A domain that no longer exists means the
+          // business genuinely has no working website. A site that exists but could not be
+          // loaded (timeout, blocking, JS-only) is unknown, so it must not allow a "no website" result.
+          let srcHost = '';
+          try { srcHost = new URL(srcUrl.startsWith('http') ? srcUrl : `https://${srcUrl}`).hostname; } catch (_) {}
+          let srcDomainDead = false;
+          if (srcHost) {
+            try {
+              await require('dns').promises.resolve(srcHost);
+            } catch (dnsErr) {
+              srcDomainDead = ['ENOTFOUND', 'ENODATA', 'ESERVFAIL'].includes(dnsErr.code);
+            }
+          }
+          const why = srcMatch.reason || srcMatch.error || (srcMatch.isParked ? 'parked domain' : 'page did not identify this business');
+
+          // A listed domain that does not exist is often a typo in the map record
+          // (treasurehomesdesign.com vs the real treasurehomesdesigns.com). Try close variants.
+          if (srcDomainDead && srcHost) {
+            const bare = srcHost.replace(/^www\./, '');
+            const dot = bare.indexOf('.');
+            const sld = bare.slice(0, dot), tld = bare.slice(dot);
+            const variants = [sld.endsWith('s') ? sld.slice(0, -1) : sld + 's', sld.replace(/-/g, ''), sld.includes('-') ? sld : null]
+              .filter(v => v && v !== sld && v.length >= 3)
+              .map(v => v + tld);
+            for (const variant of [...new Set(variants)]) {
+              let resolves = false;
+              try { await require('dns').promises.resolve(variant); resolves = true; } catch (_) {}
+              if (!resolves) continue;
+              const vMatch = await inspectCandidateWebsite(`https://${variant}`, name, city, phone, postcode);
+              if (vMatch.isMatch) {
+                evidenceTrail.push(`Source record: listed website ${srcUrl} does not exist, but the corrected domain ${variant} is this business's site (${vMatch.reason})`);
+                return {
+                  websiteCheckStatus: 'Has website',
+                  websiteUrl: vMatch.matchedUrl || `https://${variant}`,
+                  pageTitle: vMatch.title || '',
+                  socialProfile: detectedSocialProfile,
+                  confidence: 'high',
+                  websiteEvidence: evidenceTrail.join('; '),
+                  checkedAt
+                };
+              }
+            }
+          }
+
+          if (srcDomainDead) {
+            evidenceTrail.push(`Source record: listed website ${srcUrl} no longer exists (domain does not resolve) — no working website`);
+          } else if (srcMatch.isParked) {
+            evidenceTrail.push(`Source record: listed website ${srcUrl} is a parked/for-sale domain — no working website`);
+          } else if (!srcMatch.error && !srcMatch.isBlocked && !srcMatch.isClosed &&
+                     /domain contains name token yes/.test(srcMatch.reason || '') &&
+                     /homepage about business yes/.test(srcMatch.reason || '')) {
+            // The business's own map listing links to a live site whose domain carries its name
+            // and whose homepage is about it. The listing itself is the second signal.
+            evidenceTrail.push(`Source record: listed website ${srcUrl} carries the business name and its homepage is about this business`);
+            return {
+              websiteCheckStatus: 'Has website',
+              websiteUrl: srcUrl,
+              pageTitle: srcMatch.title || '',
+              socialProfile: detectedSocialProfile,
+              confidence: 'high',
+              websiteEvidence: evidenceTrail.join('; '),
+              checkedAt
+            };
+          } else if (/HTTP (401|403|429|503)\b/.test(srcMatch.error || '') || [401, 403, 429, 503].includes(srcMatch.statusCode)) {
+            // The business's own map listing names this website and the server answers, but
+            // blocks automated visitors (Cloudflare etc). That is a live website.
+            evidenceTrail.push(`Source record: listed website ${srcUrl} is live but blocks automated checks (${srcMatch.error || 'HTTP ' + srcMatch.statusCode})`);
+            return {
+              websiteCheckStatus: 'Has website',
+              websiteUrl: srcUrl,
+              pageTitle: '',
+              socialProfile: detectedSocialProfile,
+              confidence: 'medium',
+              websiteEvidence: evidenceTrail.join('; '),
+              checkedAt
+            };
+          } else if (srcMatch.error || !srcMatch.title) {
+            evidenceTrail.push(`Source record: listed website ${srcUrl} exists but could not be checked (${why})`);
+            searchBlockedOrFailed = true;
+            if (!searchBlockedReason) searchBlockedReason = `source lists a website (${srcUrl}) that exists but could not be checked: ${why}`;
+          } else {
+            evidenceTrail.push(`Source record: URL rejected by first-party verification (${srcUrl}: ${why})`);
+          }
         }
       } else if (isSocialMediaUrl(srcUrl)) {
         if (isMatchingBusinessSocial(srcUrl, name)) {
@@ -251,6 +347,13 @@ class WebsiteVerifier {
 
       const organicResults = [];
       for (const item of searchRes.results) {
+        // Directory / review listings (Yelp, Yell, Yellow Pages...) that name this business are
+        // proof it really exists, even though they are not its website.
+        if (BUSINESS_LISTING_HOSTS.test(safeHost(item.url))) {
+          const { distinctiveTokens: dt } = extractBusinessTokens(name);
+          const text = `${item.title || ''} ${item.url || ''}`.toLowerCase().replace(/['’]/g, '');
+          if (dt.length && dt.every(t => text.includes(t))) directoryListingCount++;
+        }
         if (isSocialMediaUrl(item.url)) {
           if (isMatchingBusinessSocial(item.url, name)) {
             searchSocialLinks.push(item.url);
@@ -544,6 +647,45 @@ class WebsiteVerifier {
         socialProfile: detectedSocialProfile,
         confidence: 'low',
         websiteEvidence: `UNCERTAIN (${searchBlockedReason}); Trail: ${evidenceTrail.join('; ')}`,
+        checkedAt
+      };
+    }
+
+    // 1b. The business must be shown to exist before it can be a "no website" lead. Open map
+    // data contains joke/fictional entries (e.g. "Mrs. Lovett's Meat Pies, Fleet St") and
+    // long-gone places. Accept a phone number, a government food-hygiene registration, a
+    // matching social profile, or at least one directory listing under its name.
+    const existsEvidence = hasPhone ||
+      /FSA|Food Hygiene/i.test(candidate.sourceProvider || '') ||
+      Boolean(detectedSocialProfile) ||
+      directoryListingCount > 0;
+    if (!existsEvidence) {
+      evidenceTrail.push('Existence check: no phone, no registry record, no social profile and no directory listing found for this name');
+      return {
+        websiteCheckStatus: 'Uncertain',
+        websiteUrl: '',
+        socialProfile: '',
+        confidence: 'low',
+        websiteEvidence: `UNCERTAIN (could not confirm this business exists); Trail: ${evidenceTrail.join('; ')}`,
+        checkedAt
+      };
+    }
+    if (directoryListingCount > 0) {
+      evidenceTrail.push(`Existence check: listed in ${directoryListingCount} directory result(s)`);
+    }
+
+    // A generic name ("Lunch Bar", "The Bakery") with no phone and no street address cannot be
+    // tied to one real business: directory hits may belong to any of many similarly named places.
+    const { distinctiveTokens: nameDistinctive } = extractBusinessTokens(name, city);
+    const hasStreetAddress = /\d/.test(address || '') || Boolean(postcode);
+    if (!hasPhone && !hasStreetAddress && nameDistinctive.length <= 1) {
+      evidenceTrail.push('Identity check: generic name with no phone and no street address');
+      return {
+        websiteCheckStatus: 'Uncertain',
+        websiteUrl: '',
+        socialProfile: detectedSocialProfile,
+        confidence: 'low',
+        websiteEvidence: `UNCERTAIN (name too generic to identify one business without a phone or street address); Trail: ${evidenceTrail.join('; ')}`,
         checkedAt
       };
     }
